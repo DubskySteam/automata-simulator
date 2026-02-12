@@ -19,6 +19,14 @@
   cursor: grabbing;
 }
 
+.canvas.cursor-crosshair {
+  cursor: crosshair;
+}
+
+.canvas.cursor-pointer {
+  cursor: pointer;
+}
+
 .canvas-hint {
   position: absolute;
   bottom: var(--spacing-md);

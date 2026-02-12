@@ -15,7 +15,7 @@ export function useAutomaton(initialAutomaton?: Partial<Automaton>) {
     const newState: State = {
       id: generateId(),
       label: label || `q${automaton.states.length}`,
-      isInitial: automaton.states.length === 0, // First state is initial
+      isInitial: automaton.states.length === 0,
       isAccept: false,
       position,
     };
@@ -32,7 +32,6 @@ export function useAutomaton(initialAutomaton?: Partial<Automaton>) {
     setAutomaton((prev) => ({
       ...prev,
       states: prev.states.filter((s) => s.id !== stateId),
-      // Remove transitions connected to this state
       transitions: prev.transitions.filter(
         (t) => t.from !== stateId && t.to !== stateId
       ),
@@ -68,6 +67,25 @@ export function useAutomaton(initialAutomaton?: Partial<Automaton>) {
   }, []);
 
   const addTransition = useCallback((from: string, to: string, symbols: string[]) => {
+    // Check if transition already exists
+    const existingTransition = automaton.transitions.find(
+      (t) => t.from === from && t.to === to
+    );
+
+    if (existingTransition) {
+      // Merge symbols
+      setAutomaton((prev) => ({
+        ...prev,
+        transitions: prev.transitions.map((t) =>
+          t.id === existingTransition.id
+            ? { ...t, symbols: Array.from(new Set([...t.symbols, ...symbols])) }
+            : t
+        ),
+        alphabet: Array.from(new Set([...prev.alphabet, ...symbols])),
+      }));
+      return existingTransition.id;
+    }
+
     const newTransition: Transition = {
       id: generateId(),
       from,
@@ -78,11 +96,19 @@ export function useAutomaton(initialAutomaton?: Partial<Automaton>) {
     setAutomaton((prev) => ({
       ...prev,
       transitions: [...prev.transitions, newTransition],
-      // Add symbols to alphabet if not present
       alphabet: Array.from(new Set([...prev.alphabet, ...symbols])),
     }));
 
     return newTransition.id;
+  }, [automaton.transitions]);
+
+  const updateTransition = useCallback((transitionId: string, updates: Partial<Transition>) => {
+    setAutomaton((prev) => ({
+      ...prev,
+      transitions: prev.transitions.map((t) =>
+        t.id === transitionId ? { ...t, ...updates } : t
+      ),
+    }));
   }, []);
 
   const removeTransition = useCallback((transitionId: string) => {
@@ -101,6 +127,7 @@ export function useAutomaton(initialAutomaton?: Partial<Automaton>) {
     toggleStateInitial,
     toggleStateAccept,
     addTransition,
+    updateTransition,
     removeTransition,
   };
 }
