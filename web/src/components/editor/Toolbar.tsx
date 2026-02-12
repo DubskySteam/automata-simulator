@@ -1,14 +1,44 @@
-import { ToolMode } from '@/types';
+import { ToolMode, AutomatonType } from '@/types';
 import './Toolbar.css';
 
 interface ToolbarProps {
   toolMode: ToolMode;
   onToolModeChange: (mode: ToolMode) => void;
+  automatonType: AutomatonType;
+  onAutomatonTypeChange: (type: AutomatonType) => void;
 }
 
-export function Toolbar({ toolMode, onToolModeChange }: ToolbarProps) {
+export function Toolbar({ toolMode, onToolModeChange, automatonType, onAutomatonTypeChange }: ToolbarProps) {
   return (
     <div className="toolbar">
+      <div className="toolbar-section">
+        <h3 className="toolbar-title">Type</h3>
+        <div className="toolbar-buttons">
+          <button
+            className={`toolbar-button ${automatonType === 'DFA' ? 'active' : ''}`}
+            onClick={() => onAutomatonTypeChange('DFA')}
+            title="Deterministic Finite Automaton"
+          >
+            DFA
+          </button>
+          <button
+            className={`toolbar-button ${automatonType === 'NFA' ? 'active' : ''}`}
+            onClick={() => onAutomatonTypeChange('NFA')}
+            title="Nondeterministic Finite Automaton"
+          >
+            NFA
+          </button>
+          <button
+            className={`toolbar-button ${automatonType === 'PDA' ? 'active' : ''}`}
+            onClick={() => onAutomatonTypeChange('PDA')}
+            title="Pushdown Automaton (Coming Soon)"
+            disabled
+          >
+            PDA
+          </button>
+        </div>
+      </div>
+
       <div className="toolbar-section">
         <h3 className="toolbar-title">Tools</h3>
         <div className="toolbar-buttons">

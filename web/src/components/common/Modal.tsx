@@ -1,19 +1,18 @@
-import { useEffect, useRef, ReactNode } from 'react';
+import { ReactNode, useEffect } from 'react';
 import './Modal.css';
 
 interface ModalProps {
-  title: string;
-  children: ReactNode;
   isOpen: boolean;
   onClose: () => void;
+  title: string;
+  children: ReactNode;
+  footer?: ReactNode;
 }
 
-export function Modal({ title, children, isOpen, onClose }: ModalProps) {
-  const modalRef = useRef<HTMLDivElement>(null);
-
+export function Modal({ isOpen, onClose, title, children, footer }: ModalProps) {
   useEffect(() => {
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
         onClose();
       }
     };
@@ -32,19 +31,16 @@ export function Modal({ title, children, isOpen, onClose }: ModalProps) {
   if (!isOpen) return null;
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div
-        ref={modalRef}
-        className="modal"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2 className="modal-title">{title}</h2>
-          <button className="modal-close" onClick={onClose}>
-            ×
+          <button className="modal-close-button" onClick={onClose}>
+            ✕
           </button>
         </div>
         <div className="modal-content">{children}</div>
+        {footer && <div className="modal-footer">{footer}</div>}
       </div>
     </div>
   );

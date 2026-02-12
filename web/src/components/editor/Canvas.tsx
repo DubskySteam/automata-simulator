@@ -8,9 +8,9 @@ import { ContextMenu, ContextMenuItem } from '@/components/common/ContextMenu';
 import { StateEditModal } from './StateEditModal';
 import { TransitionModal } from './TransitionModal';
 import { SimulationEngine } from '@/lib/simulation/engine';
-import { Position, ToolMode, State, Transition } from '@/types';
+import { Position, ToolMode, State, Transition, AutomatonType } from '@/types';
 import { SimulationState } from '@/types/simulation';
-import { CANVAS_CONSTANTS, CANVAS_COLORS } from '@/lib/canvas/constants';
+import { CANVAS_CONSTANTS, getCanvasColors } from '@/lib/canvas/constants';
 import { getCanvasCoordinates, isPointOnTransition } from '@/lib/canvas/utils';
 import './Canvas.css';
 
@@ -19,8 +19,11 @@ interface CanvasProps {
   height?: number;
   toolMode: ToolMode;
   showSimulation?: boolean;
+  automatonType?: AutomatonType;
+  onAutomatonTypeChange?: (type: AutomatonType) => void;
   onSimulationChange?: (simulation: SimulationState | null) => void;
   onValidationChange?: (errors: string[]) => void;
+  animationsEnabled?: boolean;
 }
 
 export function Canvas({ 
@@ -28,8 +31,11 @@ export function Canvas({
   height = 600, 
   toolMode, 
   showSimulation = false,
+  automatonType = 'NFA',
+  onAutomatonTypeChange,
   onSimulationChange,
   onValidationChange,
+  animationsEnabled = true,
 }: CanvasProps) {
   const canvasRef = useCanvas({ width, height });
   const rendererRef = useRef<CanvasRenderer | null>(null);
@@ -57,6 +63,8 @@ export function Canvas({
   const [simulation, setSimulation] = useState<SimulationState | null>(null);
   const simulationEngineRef = useRef<SimulationEngine | null>(null);
   const playIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const [animationTime, setAnimationTime] = useState(0);
+  const animationFrameRef = useRef<number | null>(null);
 
   // Use automaton hook
   const {
@@ -70,6 +78,7 @@ export function Canvas({
     updateTransition,
     removeTransition,
   } = useAutomaton({
+    type: automatonType,
     states: [
       {
         id: '1',
@@ -97,6 +106,9 @@ export function Canvas({
   });
 
   const { states, transitions } = automaton;
+
+  // Get active states for visual feedback (declared early to avoid reference errors)
+  const activeStates = simulation?.steps[simulation.currentStep]?.currentStates || [];
 
   // Update simulation engine when automaton changes
   useEffect(() => {
@@ -126,6 +138,61 @@ export function Canvas({
       };
     }
   }, [showSimulation]);
+
+  // Expose canvas helpers to parent (for epsilon transition cleanup)
+  useEffect(() => {
+    (window as any).canvasHelpers = {
+      hasEpsilonTransitions: () => {
+        return transitions.some((t) => t.symbols.includes('ε'));
+      },
+      removeEpsilonTransitions: () => {
+        const epsilonTransitionIds: string[] = [];
+        const transitionsToUpdate: Array<{ id: string; symbols: string[] }> = [];
+
+        transitions.forEach((t) => {
+          if (t.symbols.includes('ε')) {
+            const newSymbols = t.symbols.filter((s) => s !== 'ε');
+            if (newSymbols.length === 0) {
+              epsilonTransitionIds.push(t.id);
+            } else {
+              transitionsToUpdate.push({ id: t.id, symbols: newSymbols });
+            }
+          }
+        });
+
+        // Remove transitions that only have epsilon
+        epsilonTransitionIds.forEach((id) => removeTransition(id));
+        
+        // Update transitions that have epsilon + other symbols
+        transitionsToUpdate.forEach(({ id, symbols }) => 
+          updateTransition(id, { symbols })
+        );
+      },
+    };
+  }, [transitions, removeTransition, updateTransition]);
+
+  // Animation loop for breathing effect
+  useEffect(() => {
+    if (!animationsEnabled) return;
+    
+    let startTime = Date.now();
+    
+    const animate = () => {
+      const elapsed = (Date.now() - startTime) / 1000;
+      setAnimationTime(elapsed);
+      animationFrameRef.current = requestAnimationFrame(animate);
+    };
+
+    if (activeStates.length > 0) {
+      animationFrameRef.current = requestAnimationFrame(animate);
+    }
+
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
+  }, [activeStates.length, animationsEnabled]);
 
   // Find transition at position
   const findTransitionAtPosition = useCallback(
@@ -285,7 +352,7 @@ export function Canvas({
 
         return { ...prev, currentStep: prev.currentStep + 1 };
       });
-    }, 800);
+    }, 1000); // 1 second delay as requested
   }, []);
 
   const handleSimulationPause = useCallback(() => {
@@ -486,9 +553,6 @@ export function Canvas({
     rendererRef.current = new CanvasRenderer(canvas);
   }, [canvasRef]);
 
-  // Get active states for visual feedback
-  const activeStates = simulation?.steps[simulation.currentStep]?.currentStates || [];
-
   // Render loop
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -498,11 +562,25 @@ export function Canvas({
     renderer.clear(width, height);
     renderer.drawGrid(width, height, offset, zoom);
 
+    // Build a map of reverse transitions for curve detection
+    const reverseTransitionMap = new Map<string, boolean>();
+    transitions.forEach((t) => {
+      const key = `${t.from}-${t.to}`;
+      if (transitions.some((rt) => rt.from === t.to && rt.to === t.from)) {
+        reverseTransitionMap.set(key, true);
+      }
+    });
+
     transitions.forEach((transition) => {
       const fromState = states.find((s) => s.id === transition.from);
       const toState = states.find((s) => s.id === transition.to);
       if (fromState && toState) {
-        renderer.drawTransition(transition, fromState, toState, offset, zoom);
+        const key = `${transition.from}-${transition.to}`;
+        const hasReverse = reverseTransitionMap.get(key) || false;
+        
+        renderer.drawTransition(transition, fromState, toState, offset, zoom, {
+          hasReverse,
+        });
       }
     });
 
@@ -511,6 +589,7 @@ export function Canvas({
       if (fromState) {
         const ctx = canvas.getContext('2d');
         if (ctx) {
+          const CANVAS_COLORS = getCanvasColors();
           const fromX = fromState.position.x * zoom + offset.x;
           const fromY = fromState.position.y * zoom + offset.y;
           const toX = mousePos.x * zoom + offset.x;
@@ -535,6 +614,7 @@ export function Canvas({
         isHovered: hoveredState === state.id || isHighlighted,
         isSelected: selectedStates.includes(state.id),
         isActive,
+        animationTime: isActive ? animationTime : undefined,
       });
     });
   }, [
@@ -550,6 +630,7 @@ export function Canvas({
     isCreatingTransition,
     mousePos,
     activeStates,
+    animationTime,
   ]);
 
   const getCursorClass = () => {
@@ -559,17 +640,19 @@ export function Canvas({
   };
 
   return (
-    <div className="canvas-container">
-      <canvas
-        ref={canvasRef}
-        className={`canvas ${getCursorClass()}`}
-        onMouseDown={handlers.onMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handlers.onMouseUp}
-        onMouseLeave={handlers.onMouseLeave}
-        onWheel={handleWheel}
-        onContextMenu={handleContextMenu}
-      />
+    <>
+      <div className="canvas-container">
+        <canvas
+          ref={canvasRef}
+          className={`canvas ${getCursorClass()}`}
+          onMouseDown={handlers.onMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handlers.onMouseUp}
+          onMouseLeave={handlers.onMouseLeave}
+          onWheel={handleWheel}
+          onContextMenu={handleContextMenu}
+        />
+      </div>
       {contextMenu && (
         <ContextMenu
           x={contextMenu.x}
@@ -604,6 +687,6 @@ export function Canvas({
         fromLabel={transitionModal ? states.find((s) => s.id === transitionModal.fromState)?.label : undefined}
         toLabel={transitionModal ? states.find((s) => s.id === transitionModal.toState)?.label : undefined}
       />
-    </div>
+    </>
   );
 }
