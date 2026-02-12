@@ -1,17 +1,19 @@
-export type SimulationStatus = 'idle' | 'running' | 'paused' | 'completed';
-
 export interface SimulationStep {
-  currentStates: string[]; // state ids (can be multiple for NFA)
+  currentStates: string[]; // Can be multiple for NFA
   remainingInput: string;
   consumedInput: string;
-  transition?: {
+  transitionTaken?: {
     from: string;
     to: string;
     symbol: string;
   };
 }
 
-export interface SimulationResult {
-  accepted: boolean;
+export interface SimulationState {
+  isRunning: boolean;
+  isPaused: boolean;
+  currentStep: number;
   steps: SimulationStep[];
+  result: 'accepted' | 'rejected' | 'running';
+  inputString: string;
 }

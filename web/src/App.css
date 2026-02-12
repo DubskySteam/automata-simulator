@@ -1,24 +1,48 @@
 .app {
-  width: 100%;
-  height: 100%;
   display: flex;
   flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .header {
-  padding: var(--spacing-lg);
-  border-bottom: 1px solid var(--border-color);
-  background-color: var(--bg-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-md) var(--spacing-lg);
+  background: linear-gradient(135deg, var(--accent-color) 0%, #1976d2 100%);
+  color: white;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .header h1 {
-  font-size: 2rem;
-  margin-bottom: var(--spacing-xs);
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
 }
 
 .subtitle {
-  color: var(--text-secondary);
+  margin: 0;
   font-size: 0.9rem;
+  opacity: 0.9;
+  position: absolute;
+  bottom: var(--spacing-xs);
+  left: var(--spacing-lg);
+}
+
+.toggle-sim-button {
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+  background-color: rgba(255, 255, 255, 0.2);
+  color: white;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+}
+
+.toggle-sim-button:hover {
+  background-color: rgba(255, 255, 255, 0.3);
 }
 
 .main {
@@ -27,22 +51,9 @@
   overflow: hidden;
 }
 
-.placeholder {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--spacing-md);
-}
-
-.placeholder h2 {
-  font-size: 1.5rem;
-  color: var(--accent-color);
-}
-
 .footer {
-  padding: var(--spacing-md);
+  padding: var(--spacing-sm) var(--spacing-lg);
+  background-color: var(--bg-secondary);
   border-top: 1px solid var(--border-color);
   text-align: center;
   font-size: 0.85rem;
