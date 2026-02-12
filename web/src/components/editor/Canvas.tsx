@@ -5,6 +5,8 @@ import { useAutomaton } from '@/hooks/useAutomaton';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { CanvasRenderer } from '@/lib/canvas/renderer';
 import { ContextMenu, ContextMenuItem } from '@/components/common/ContextMenu';
+import { StateEditModal } from './StateEditModal';
+import { TransitionModal } from './TransitionModal';
 import { Position, ToolMode, State } from '@/types';
 import { CANVAS_CONSTANTS, CANVAS_COLORS } from '@/lib/canvas/constants';
 import { getCanvasCoordinates } from '@/lib/canvas/utils';
@@ -33,6 +35,11 @@ export function Canvas({ width = 800, height = 600, toolMode }: CanvasProps) {
     x: number;
     y: number;
     target: { type: 'state'; id: string } | { type: 'transition'; id: string } | null;
+  } | null>(null);
+  const [stateEditModal, setStateEditModal] = useState<State | null>(null);
+  const [transitionModal, setTransitionModal] = useState<{
+    fromState: string;
+    toState: string;
   } | null>(null);
 
   // Use automaton hook
@@ -99,20 +106,14 @@ export function Canvas({ width = 800, height = 600, toolMode }: CanvasProps) {
         if (!transitionDraft) {
           setTransitionDraft({ fromState: stateId });
         } else {
-          const symbols = prompt('Enter transition symbol(s) (comma-separated):');
-          if (symbols) {
-            const symbolArray = symbols.split(',').map((s) => s.trim()).filter((s) => s);
-            if (symbolArray.length > 0) {
-              addTransition(transitionDraft.fromState, stateId, symbolArray);
-            }
-          }
+          setTransitionModal({ fromState: transitionDraft.fromState, toState: stateId });
           setTransitionDraft(null);
         }
       } else if (toolMode === 'select') {
         handleStateSelect(stateId, event.shiftKey);
       }
     },
-    [toolMode, transitionDraft, addTransition, handleStateSelect]
+    [toolMode, transitionDraft, handleStateSelect]
   );
 
   const handleTransitionStart = useCallback((stateId: string) => {
@@ -122,17 +123,11 @@ export function Canvas({ width = 800, height = 600, toolMode }: CanvasProps) {
   const handleTransitionEnd = useCallback(
     (stateId: string) => {
       if (transitionDraft) {
-        const symbols = prompt('Enter transition symbol(s) (comma-separated):');
-        if (symbols) {
-          const symbolArray = symbols.split(',').map((s) => s.trim()).filter((s) => s);
-          if (symbolArray.length > 0) {
-            addTransition(transitionDraft.fromState, stateId, symbolArray);
-          }
-        }
+        setTransitionModal({ fromState: transitionDraft.fromState, toState: stateId });
       }
       setTransitionDraft(null);
     },
-    [transitionDraft, addTransition]
+    [transitionDraft]
   );
 
   const handleCanvasClick = useCallback(
@@ -268,13 +263,10 @@ export function Canvas({ width = 800, height = 600, toolMode }: CanvasProps) {
 
       return [
         {
-          label: 'Edit Label',
+          label: 'Edit State',
           icon: '✏️',
           onClick: () => {
-            const newLabel = prompt('Enter new label:', state.label);
-            if (newLabel && newLabel.trim()) {
-              updateState(state.id, { label: newLabel.trim() });
-            }
+            setStateEditModal(state);
           },
         },
         { separator: true } as ContextMenuItem,
@@ -302,7 +294,7 @@ export function Canvas({ width = 800, height = 600, toolMode }: CanvasProps) {
     }
 
     return [];
-  }, [contextMenu, states, updateState, toggleStateInitial, toggleStateAccept, removeState]);
+  }, [contextMenu, states, toggleStateInitial, toggleStateAccept, removeState]);
 
   // Initialize renderer
   useEffect(() => {
@@ -398,6 +390,23 @@ export function Canvas({ width = 800, height = 600, toolMode }: CanvasProps) {
           onClose={() => setContextMenu(null)}
         />
       )}
+      <StateEditModal
+        state={stateEditModal}
+        isOpen={!!stateEditModal}
+        onClose={() => setStateEditModal(null)}
+        onSave={updateState}
+      />
+      <TransitionModal
+        isOpen={!!transitionModal}
+        onClose={() => setTransitionModal(null)}
+        onSave={(symbols) => {
+          if (transitionModal) {
+            addTransition(transitionModal.fromState, transitionModal.toState, symbols);
+          }
+        }}
+        fromLabel={states.find((s) => s.id === transitionModal?.fromState)?.label}
+        toLabel={states.find((s) => s.id === transitionModal?.toState)?.label}
+      />
     </div>
   );
 }
