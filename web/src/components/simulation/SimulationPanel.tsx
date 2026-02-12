@@ -24,7 +24,7 @@ export function SimulationPanel({
   const [inputString, setInputString] = useState('');
 
   const handleStart = () => {
-    if (inputString.trim()) {
+    if (inputString.trim() && validationErrors.length === 0) {
       onStart(inputString);
     }
   };
@@ -122,12 +122,8 @@ export function SimulationPanel({
             <div className="simulation-progress">
               <div className="simulation-string">
                 <span className="consumed">{currentStep?.consumedInput}</span>
-                <span className="current">
-                  {currentStep?.remainingInput.charAt(0) || ''}
-                </span>
-                <span className="remaining">
-                  {currentStep?.remainingInput.slice(1) || ''}
-                </span>
+                <span className="current">{currentStep?.remainingInput.charAt(0) || ''}</span>
+                <span className="remaining">{currentStep?.remainingInput.slice(1) || ''}</span>
               </div>
               <div className="simulation-step-info">
                 Step {simulation.currentStep + 1} of {simulation.steps.length}

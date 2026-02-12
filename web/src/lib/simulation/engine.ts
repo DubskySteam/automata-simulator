@@ -137,6 +137,20 @@ export class SimulationEngine {
 
     // Check for DFA determinism
     if (this.automaton.type === 'DFA') {
+      // Check for epsilon transitions in DFA
+      const epsilonTransitions = this.automaton.transitions.filter((t) => 
+        t.symbols.includes('ε')
+      );
+      if (epsilonTransitions.length > 0) {
+        const statesWithEpsilon = new Set(epsilonTransitions.map(t => {
+          const state = this.automaton.states.find(s => s.id === t.from);
+          return state?.label || t.from;
+        }));
+        statesWithEpsilon.forEach(stateLabel => {
+          errors.push(`DFA cannot have ε-transitions (found in state ${stateLabel})`);
+        });
+      }
+
       for (const state of this.automaton.states) {
         const outgoingTransitions = this.automaton.transitions.filter(
           (t) => t.from === state.id
@@ -154,11 +168,6 @@ export class SimulationEngine {
             }
           }
         }
-
-        // Check for epsilon transitions in DFA
-        if (outgoingTransitions.some((t) => t.symbols.includes('ε'))) {
-          errors.push(`DFA cannot have ε-transitions (found in state ${state.label})`);
-        }
       }
     }
 
@@ -167,4 +176,5 @@ export class SimulationEngine {
       errors,
     };
   }
+
 }

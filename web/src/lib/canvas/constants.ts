@@ -1,7 +1,7 @@
 export const CANVAS_CONSTANTS = {
   STATE_RADIUS: 30,
-  STATE_BORDER_WIDTH: 2,
-  ARROW_HEAD_SIZE: 10,
+  STATE_BORDER_WIDTH: 2.5,
+  ARROW_HEAD_SIZE: 12,
   TRANSITION_CURVE_OFFSET: 30,
   GRID_SIZE: 20,
   MIN_ZOOM: 0.5,
@@ -12,21 +12,27 @@ export const CANVAS_CONSTANTS = {
 
 export const CANVAS_COLORS = {
   state: {
-    default: '#90caf9',
-    initial: '#4caf50',
-    accept: '#ffd54f',
-    active: '#ff6b6b',
-    hover: '#64b5f6',
-    selected: '#42a5f5',
+    default: '#e3f2fd',
+    initial: '#c8e6c9',
+    accept: '#fff9c4',
+    active: '#ef5350',
+    hover: '#bbdefb',
+    selected: '#64b5f6',
     border: '#1976d2',
+    borderActive: '#d32f2f',
   },
   transition: {
-    default: '#424242',
+    default: '#616161',
     hover: '#1976d2',
     selected: '#2196f3',
+    arrow: '#424242',
   },
   canvas: {
-    background: '#fafafa',
-    grid: '#e0e0e0',
+    background: '#ffffff',
+    grid: '#f0f0f0',
+  },
+  text: {
+    state: '#000000',
+    transition: '#212121',
   },
 } as const;
