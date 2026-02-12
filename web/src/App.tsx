@@ -1,3 +1,4 @@
+import { Canvas } from './components/editor/Canvas';
 import './App.css';
 
 function App() {
@@ -7,14 +8,11 @@ function App() {
         <h1>Automata Visualizer</h1>
         <p className="subtitle">Interactive DFA/NFA Editor & Simulator</p>
       </header>
-      
+
       <main className="main">
-        <div className="placeholder">
-          <h2>Ready to Build! 🚀</h2>
-          <p>Project structure initialized</p>
-        </div>
+        <Canvas width={window.innerWidth} height={window.innerHeight - 160} />
       </main>
-      
+
       <footer className="footer">
         <p>
           Licensed under{' '}
