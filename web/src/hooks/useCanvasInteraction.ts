@@ -27,6 +27,7 @@ export function useCanvasInteraction({
   const [isPanning, setIsPanning] = useState(false);
   const dragStartRef = useRef<Position | null>(null);
   const draggedStatesRef = useRef<Map<string, Position>>(new Map());
+  const hasMovedRef = useRef(false); // Track if mouse actually moved
 
   const findStateAtPosition = useCallback(
     (pos: Position): State | null => {
@@ -48,11 +49,12 @@ export function useCanvasInteraction({
       const pos = getCanvasCoordinates(event, canvas, offset, zoom);
       const clickedState = findStateAtPosition(pos);
 
+      hasMovedRef.current = false; // Reset move tracking
+
       if (event.button === 0) {
         // Left click
         if (clickedState) {
-          // Start dragging state(s)
-          setIsDragging(true);
+          // Prepare for potential state drag
           dragStartRef.current = pos;
 
           // If clicked state is not selected, select only it
@@ -72,8 +74,7 @@ export function useCanvasInteraction({
             })
           );
         } else {
-          // Start panning
-          setIsPanning(true);
+          // Prepare for potential canvas pan
           dragStartRef.current = { x: event.clientX, y: event.clientY };
         }
       }
@@ -86,24 +87,44 @@ export function useCanvasInteraction({
       const canvas = event.currentTarget;
       const pos = getCanvasCoordinates(event, canvas, offset, zoom);
 
-      if (isDragging && dragStartRef.current) {
-        // Drag states
-        const dx = pos.x - dragStartRef.current.x;
-        const dy = pos.y - dragStartRef.current.y;
+      if (dragStartRef.current) {
+        const moveThreshold = 5; // pixels to move before considering it a drag
 
-        draggedStatesRef.current.forEach((initialPos, stateId) => {
-          onStateMove(stateId, {
-            x: initialPos.x + dx,
-            y: initialPos.y + dy,
+        if (!isDragging && !isPanning) {
+          // Check if we've moved enough to start dragging
+          const distanceMoved = draggedStatesRef.current.size > 0
+            ? Math.hypot(pos.x - dragStartRef.current.x, pos.y - dragStartRef.current.y)
+            : Math.hypot(event.clientX - dragStartRef.current.x, event.clientY - dragStartRef.current.y);
+
+          if (distanceMoved > moveThreshold) {
+            hasMovedRef.current = true;
+            if (draggedStatesRef.current.size > 0) {
+              setIsDragging(true);
+            } else {
+              setIsPanning(true);
+            }
+          }
+        }
+
+        if (isDragging) {
+          // Drag states
+          const dx = pos.x - dragStartRef.current.x;
+          const dy = pos.y - dragStartRef.current.y;
+
+          draggedStatesRef.current.forEach((initialPos, stateId) => {
+            onStateMove(stateId, {
+              x: initialPos.x + dx,
+              y: initialPos.y + dy,
+            });
           });
-        });
-      } else if (isPanning && dragStartRef.current) {
-        // Pan canvas
-        const dx = event.clientX - dragStartRef.current.x;
-        const dy = event.clientY - dragStartRef.current.y;
-        dragStartRef.current = { x: event.clientX, y: event.clientY };
+        } else if (isPanning) {
+          // Pan canvas
+          const dx = event.clientX - dragStartRef.current.x;
+          const dy = event.clientY - dragStartRef.current.y;
+          dragStartRef.current = { x: event.clientX, y: event.clientY };
 
-        return { panDelta: { x: dx, y: dy } };
+          return { panDelta: { x: dx, y: dy } };
+        }
       } else {
         // Update hover state
         const hoveredState = findStateAtPosition(pos);
@@ -115,19 +136,19 @@ export function useCanvasInteraction({
 
   const handleMouseUp = useCallback(
     (event: React.MouseEvent<HTMLCanvasElement>) => {
-      if (isDragging) {
-        setIsDragging(false);
-        dragStartRef.current = null;
-        draggedStatesRef.current.clear();
-      }
+      const wasDragging = isDragging;
+      const wasPanning = isPanning;
+      const hasMoved = hasMovedRef.current;
 
-      if (isPanning) {
-        setIsPanning(false);
-        dragStartRef.current = null;
-      }
+      // Reset all drag/pan state
+      setIsDragging(false);
+      setIsPanning(false);
+      dragStartRef.current = null;
+      draggedStatesRef.current.clear();
+      hasMovedRef.current = false;
 
-      // Handle click (not drag)
-      if (!isDragging && !isPanning && event.button === 0) {
+      // Only trigger click if we didn't drag/pan
+      if (!wasDragging && !wasPanning && !hasMoved && event.button === 0) {
         const canvas = event.currentTarget;
         const pos = getCanvasCoordinates(event, canvas, offset, zoom);
         const clickedState = findStateAtPosition(pos);
@@ -147,6 +168,7 @@ export function useCanvasInteraction({
     setIsDragging(false);
     setIsPanning(false);
     dragStartRef.current = null;
+    hasMovedRef.current = false;
   }, []);
 
   const handleWheel = useCallback((event: React.WheelEvent<HTMLCanvasElement>) => {
