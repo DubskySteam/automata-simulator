@@ -10,6 +10,7 @@ export interface CanvasState {
   selectedTransitions: string[];
   hoveredState: string | null;
   hoveredTransition: string | null;
+  toolMode: ToolMode;
 }
 
 export interface DragState {
@@ -25,4 +26,9 @@ export interface CanvasConfig {
   gridSize: number;
   snapToGrid: boolean;
   backgroundColor: string;
+}
+
+export interface TransitionDraft {
+  fromState: string;
+  currentPos: Position;
 }
