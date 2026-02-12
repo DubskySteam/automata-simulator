@@ -7,30 +7,40 @@ interface UseCanvasInteractionProps {
   states: State[];
   onStateMove: (stateId: string, newPosition: Position) => void;
   onStateSelect: (stateId: string, multiSelect: boolean) => void;
-  onCanvasClick: (position: Position) => void;
+  onStateClick?: (stateId: string, event: React.MouseEvent) => void;
+  onCanvasClick: (position: Position, event: React.MouseEvent) => void;
+  onTransitionStart?: (stateId: string) => void;
+  onTransitionEnd?: (stateId: string) => void;
   offset: Position;
   zoom: number;
   selectedStates: string[];
+  enabled?: boolean;
 }
 
 export function useCanvasInteraction({
   states,
   onStateMove,
   onStateSelect,
+  onStateClick,
   onCanvasClick,
+  onTransitionStart,
+  onTransitionEnd,
   offset,
   zoom,
   selectedStates,
+  enabled = true,
 }: UseCanvasInteractionProps) {
   const [hoveredState, setHoveredState] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
+  const [isCreatingTransition, setIsCreatingTransition] = useState(false);
   const dragStartRef = useRef<Position | null>(null);
   const draggedStatesRef = useRef<Map<string, Position>>(new Map());
+  const hasMovedRef = useRef(false);
+  const transitionStartStateRef = useRef<string | null>(null);
 
   const findStateAtPosition = useCallback(
     (pos: Position): State | null => {
-      // Check in reverse order (top-most first)
       for (let i = states.length - 1; i >= 0; i--) {
         const state = states[i];
         if (isPointInCircle(pos, state.position, CANVAS_CONSTANTS.STATE_RADIUS)) {
@@ -44,23 +54,32 @@ export function useCanvasInteraction({
 
   const handleMouseDown = useCallback(
     (event: React.MouseEvent<HTMLCanvasElement>) => {
+      if (!enabled) return;
+
       const canvas = event.currentTarget;
       const pos = getCanvasCoordinates(event, canvas, offset, zoom);
       const clickedState = findStateAtPosition(pos);
 
+      hasMovedRef.current = false;
+
       if (event.button === 0) {
         // Left click
-        if (clickedState) {
-          // Start dragging state(s)
-          setIsDragging(true);
+        if (clickedState && event.shiftKey) {
+          // Shift+click on state: start transition creation
+          setIsCreatingTransition(true);
+          transitionStartStateRef.current = clickedState.id;
+          dragStartRef.current = pos;
+          if (onTransitionStart) {
+            onTransitionStart(clickedState.id);
+          }
+        } else if (clickedState) {
+          // Regular click on state: prepare for drag
           dragStartRef.current = pos;
 
-          // If clicked state is not selected, select only it
           if (!selectedStates.includes(clickedState.id)) {
             onStateSelect(clickedState.id, event.shiftKey);
           }
 
-          // Store initial positions of all selected states
           const statesToDrag = selectedStates.includes(clickedState.id)
             ? selectedStates
             : [clickedState.id];
@@ -72,81 +91,123 @@ export function useCanvasInteraction({
             })
           );
         } else {
-          // Start panning
-          setIsPanning(true);
+          // Click on empty canvas: prepare for pan
           dragStartRef.current = { x: event.clientX, y: event.clientY };
         }
       }
     },
-    [states, selectedStates, findStateAtPosition, onStateSelect, offset, zoom]
+    [enabled, states, selectedStates, findStateAtPosition, onStateSelect, onTransitionStart, offset, zoom]
   );
 
   const handleMouseMove = useCallback(
     (event: React.MouseEvent<HTMLCanvasElement>) => {
+      if (!enabled) return;
+
       const canvas = event.currentTarget;
       const pos = getCanvasCoordinates(event, canvas, offset, zoom);
 
-      if (isDragging && dragStartRef.current) {
-        // Drag states
-        const dx = pos.x - dragStartRef.current.x;
-        const dy = pos.y - dragStartRef.current.y;
+      if (dragStartRef.current) {
+        const moveThreshold = 5;
 
-        draggedStatesRef.current.forEach((initialPos, stateId) => {
-          onStateMove(stateId, {
-            x: initialPos.x + dx,
-            y: initialPos.y + dy,
+        if (!isDragging && !isPanning && !isCreatingTransition) {
+          const distanceMoved = draggedStatesRef.current.size > 0
+            ? Math.hypot(pos.x - dragStartRef.current.x, pos.y - dragStartRef.current.y)
+            : Math.hypot(event.clientX - dragStartRef.current.x, event.clientY - dragStartRef.current.y);
+
+          if (distanceMoved > moveThreshold) {
+            hasMovedRef.current = true;
+            if (transitionStartStateRef.current) {
+              setIsCreatingTransition(true);
+            } else if (draggedStatesRef.current.size > 0) {
+              setIsDragging(true);
+            } else {
+              setIsPanning(true);
+            }
+          }
+        }
+
+        if (isDragging) {
+          const dx = pos.x - dragStartRef.current.x;
+          const dy = pos.y - dragStartRef.current.y;
+
+          draggedStatesRef.current.forEach((initialPos, stateId) => {
+            onStateMove(stateId, {
+              x: initialPos.x + dx,
+              y: initialPos.y + dy,
+            });
           });
-        });
-      } else if (isPanning && dragStartRef.current) {
-        // Pan canvas
-        const dx = event.clientX - dragStartRef.current.x;
-        const dy = event.clientY - dragStartRef.current.y;
-        dragStartRef.current = { x: event.clientX, y: event.clientY };
+        } else if (isPanning) {
+          const dx = event.clientX - dragStartRef.current.x;
+          const dy = event.clientY - dragStartRef.current.y;
+          dragStartRef.current = { x: event.clientX, y: event.clientY };
 
-        return { panDelta: { x: dx, y: dy } };
+          return { panDelta: { x: dx, y: dy } };
+        } else if (isCreatingTransition) {
+          return { transitionDraftPos: pos };
+        }
       } else {
-        // Update hover state
         const hoveredState = findStateAtPosition(pos);
         setHoveredState(hoveredState?.id || null);
       }
     },
-    [isDragging, isPanning, findStateAtPosition, onStateMove, offset, zoom]
+    [enabled, isDragging, isPanning, isCreatingTransition, findStateAtPosition, onStateMove, offset, zoom]
   );
 
   const handleMouseUp = useCallback(
     (event: React.MouseEvent<HTMLCanvasElement>) => {
-      if (isDragging) {
-        setIsDragging(false);
-        dragStartRef.current = null;
-        draggedStatesRef.current.clear();
+      if (!enabled) return;
+
+      const canvas = event.currentTarget;
+      const pos = getCanvasCoordinates(event, canvas, offset, zoom);
+      const wasDragging = isDragging;
+      const wasPanning = isPanning;
+      const wasCreatingTransition = isCreatingTransition;
+      const hasMoved = hasMovedRef.current;
+
+      // Handle transition end
+      if (wasCreatingTransition && transitionStartStateRef.current) {
+        const targetState = findStateAtPosition(pos);
+        if (targetState && onTransitionEnd) {
+          onTransitionEnd(targetState.id);
+        }
+        setIsCreatingTransition(false);
+        transitionStartStateRef.current = null;
       }
 
-      if (isPanning) {
-        setIsPanning(false);
-        dragStartRef.current = null;
-      }
+      // Reset all drag/pan state
+      setIsDragging(false);
+      setIsPanning(false);
+      dragStartRef.current = null;
+      draggedStatesRef.current.clear();
+      hasMovedRef.current = false;
 
-      // Handle click (not drag)
-      if (!isDragging && !isPanning && event.button === 0) {
-        const canvas = event.currentTarget;
-        const pos = getCanvasCoordinates(event, canvas, offset, zoom);
+      // Only trigger click if we didn't drag/pan
+      if (!wasDragging && !wasPanning && !wasCreatingTransition && !hasMoved && event.button === 0) {
         const clickedState = findStateAtPosition(pos);
 
         if (clickedState) {
-          onStateSelect(clickedState.id, event.shiftKey);
+          // If onStateClick is provided, use it (for tool modes that need custom state click behavior)
+          if (onStateClick) {
+            onStateClick(clickedState.id, event);
+          } else {
+            onStateSelect(clickedState.id, event.shiftKey);
+          }
         } else {
-          onCanvasClick(pos);
+          onCanvasClick(pos, event);
         }
       }
     },
-    [isDragging, isPanning, findStateAtPosition, onStateSelect, onCanvasClick, offset, zoom]
+    [enabled, isDragging, isPanning, isCreatingTransition, findStateAtPosition, onStateSelect, onStateClick, onCanvasClick, onTransitionEnd, offset, zoom]
   );
 
   const handleMouseLeave = useCallback(() => {
     setHoveredState(null);
     setIsDragging(false);
     setIsPanning(false);
+    setIsCreatingTransition(false);
     dragStartRef.current = null;
+    hasMovedRef.current = false;
+    transitionStartStateRef.current = null;
   }, []);
 
   const handleWheel = useCallback((event: React.WheelEvent<HTMLCanvasElement>) => {
@@ -159,6 +220,7 @@ export function useCanvasInteraction({
     hoveredState,
     isDragging,
     isPanning,
+    isCreatingTransition,
     handlers: {
       onMouseDown: handleMouseDown,
       onMouseMove: handleMouseMove,

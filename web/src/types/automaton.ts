@@ -1,4 +1,4 @@
-export type AutomatonType = 'DFA' | 'NFA';
+export type AutomatonType = 'DFA' | 'NFA' | 'PDA';
 
 export interface Position {
   x: number;
