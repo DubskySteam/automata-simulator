@@ -7,7 +7,6 @@ import { CanvasRenderer } from '@/lib/canvas/renderer';
 import { ContextMenu, ContextMenuItem } from '@/components/common/ContextMenu';
 import { StateEditModal } from './StateEditModal';
 import { TransitionModal } from './TransitionModal';
-import { SimulationPanel } from '@/components/simulation/SimulationPanel';
 import { SimulationEngine } from '@/lib/simulation/engine';
 import { Position, ToolMode, State, Transition } from '@/types';
 import { SimulationState } from '@/types/simulation';
@@ -20,9 +19,18 @@ interface CanvasProps {
   height?: number;
   toolMode: ToolMode;
   showSimulation?: boolean;
+  onSimulationChange?: (simulation: SimulationState | null) => void;
+  onValidationChange?: (errors: string[]) => void;
 }
 
-export function Canvas({ width = 800, height = 600, toolMode, showSimulation = false }: CanvasProps) {
+export function Canvas({ 
+  width = 800, 
+  height = 600, 
+  toolMode, 
+  showSimulation = false,
+  onSimulationChange,
+  onValidationChange,
+}: CanvasProps) {
   const canvasRef = useCanvas({ width, height });
   const rendererRef = useRef<CanvasRenderer | null>(null);
   const [offset, setOffset] = useState<Position>({ x: 0, y: 0 });
@@ -47,7 +55,6 @@ export function Canvas({ width = 800, height = 600, toolMode, showSimulation = f
     editingTransitionId?: string;
   } | null>(null);
   const [simulation, setSimulation] = useState<SimulationState | null>(null);
-  const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const simulationEngineRef = useRef<SimulationEngine | null>(null);
   const playIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -95,8 +102,30 @@ export function Canvas({ width = 800, height = 600, toolMode, showSimulation = f
   useEffect(() => {
     simulationEngineRef.current = new SimulationEngine(automaton);
     const validation = simulationEngineRef.current.validate();
-    setValidationErrors(validation.errors);
-  }, [automaton]);
+    if (onValidationChange) {
+      onValidationChange(validation.errors);
+    }
+  }, [automaton, onValidationChange]);
+
+  // Notify parent of simulation changes
+  useEffect(() => {
+    if (onSimulationChange) {
+      onSimulationChange(simulation);
+    }
+  }, [simulation, onSimulationChange]);
+
+  // Expose simulation handlers via props
+  useEffect(() => {
+    if (showSimulation) {
+      (window as any).simulationHandlers = {
+        start: handleSimulationStart,
+        step: handleSimulationStep,
+        reset: handleSimulationReset,
+        play: handleSimulationPlay,
+        pause: handleSimulationPause,
+      };
+    }
+  }, [showSimulation]);
 
   // Find transition at position
   const findTransitionAtPosition = useCallback(
@@ -530,64 +559,51 @@ export function Canvas({ width = 800, height = 600, toolMode, showSimulation = f
   };
 
   return (
-    <>
-      <div className="canvas-container">
-        <canvas
-          ref={canvasRef}
-          className={`canvas ${getCursorClass()}`}
-          onMouseDown={handlers.onMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handlers.onMouseUp}
-          onMouseLeave={handlers.onMouseLeave}
-          onWheel={handleWheel}
-          onContextMenu={handleContextMenu}
-        />
-        {contextMenu && (
-          <ContextMenu
-            x={contextMenu.x}
-            y={contextMenu.y}
-            items={getContextMenuItems()}
-            onClose={() => setContextMenu(null)}
-          />
-        )}
-        <StateEditModal
-          state={stateEditModal}
-          isOpen={!!stateEditModal}
-          onClose={() => setStateEditModal(null)}
-          onSave={updateState}
-        />
-        <TransitionModal
-          isOpen={!!transitionModal}
-          onClose={() => setTransitionModal(null)}
-          onSave={(symbols) => {
-            if (transitionModal) {
-              if (transitionModal.editingTransitionId) {
-                updateTransition(transitionModal.editingTransitionId, { symbols });
-              } else {
-                addTransition(transitionModal.fromState, transitionModal.toState, symbols);
-              }
-            }
-          }}
-          initialSymbols={
-            transitionModal?.editingTransitionId
-              ? transitions.find((t) => t.id === transitionModal.editingTransitionId)?.symbols
-              : undefined
-          }
-          fromLabel={transitionModal ? states.find((s) => s.id === transitionModal.fromState)?.label : undefined}
-          toLabel={transitionModal ? states.find((s) => s.id === transitionModal.toState)?.label : undefined}
-        />
-      </div>
-      {showSimulation && (
-        <SimulationPanel
-          simulation={simulation}
-          onStart={handleSimulationStart}
-          onStep={handleSimulationStep}
-          onReset={handleSimulationReset}
-          onPlay={handleSimulationPlay}
-          onPause={handleSimulationPause}
-          validationErrors={validationErrors}
+    <div className="canvas-container">
+      <canvas
+        ref={canvasRef}
+        className={`canvas ${getCursorClass()}`}
+        onMouseDown={handlers.onMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handlers.onMouseUp}
+        onMouseLeave={handlers.onMouseLeave}
+        onWheel={handleWheel}
+        onContextMenu={handleContextMenu}
+      />
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          items={getContextMenuItems()}
+          onClose={() => setContextMenu(null)}
         />
       )}
-    </>
+      <StateEditModal
+        state={stateEditModal}
+        isOpen={!!stateEditModal}
+        onClose={() => setStateEditModal(null)}
+        onSave={updateState}
+      />
+      <TransitionModal
+        isOpen={!!transitionModal}
+        onClose={() => setTransitionModal(null)}
+        onSave={(symbols) => {
+          if (transitionModal) {
+            if (transitionModal.editingTransitionId) {
+              updateTransition(transitionModal.editingTransitionId, { symbols });
+            } else {
+              addTransition(transitionModal.fromState, transitionModal.toState, symbols);
+            }
+          }
+        }}
+        initialSymbols={
+          transitionModal?.editingTransitionId
+            ? transitions.find((t) => t.id === transitionModal.editingTransitionId)?.symbols
+            : undefined
+        }
+        fromLabel={transitionModal ? states.find((s) => s.id === transitionModal.fromState)?.label : undefined}
+        toLabel={transitionModal ? states.find((s) => s.id === transitionModal.toState)?.label : undefined}
+      />
+    </div>
   );
 }

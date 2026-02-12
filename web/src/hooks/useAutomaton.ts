@@ -1,32 +1,43 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Automaton, State, Transition, Position } from '@/types';
 import { generateId } from '@/lib/canvas/utils';
 
 export function useAutomaton(initialAutomaton?: Partial<Automaton>) {
   const [automaton, setAutomaton] = useState<Automaton>({
-    type: 'DFA',
+    type: 'NFA',
     states: [],
     transitions: [],
     alphabet: [],
     ...initialAutomaton,
   });
 
+  // Update automaton type when it changes externally
+  useEffect(() => {
+    if (initialAutomaton?.type && initialAutomaton.type !== automaton.type) {
+      setAutomaton((prev) => ({ ...prev, type: initialAutomaton.type! }));
+    }
+  }, [initialAutomaton?.type]);
+
+  const setAutomatonType = useCallback((type: 'DFA' | 'NFA') => {
+    setAutomaton((prev) => ({ ...prev, type }));
+  }, []);
+
   const addState = useCallback((position: Position, label?: string) => {
-    const newState: State = {
-      id: generateId(),
-      label: label || `q${automaton.states.length}`,
-      isInitial: automaton.states.length === 0,
-      isAccept: false,
-      position,
-    };
+    setAutomaton((prev) => {
+      const newState: State = {
+        id: generateId(),
+        label: label || `q${prev.states.length}`,
+        isInitial: prev.states.length === 0,
+        isAccept: false,
+        position,
+      };
 
-    setAutomaton((prev) => ({
-      ...prev,
-      states: [...prev.states, newState],
-    }));
-
-    return newState.id;
-  }, [automaton.states.length]);
+      return {
+        ...prev,
+        states: [...prev.states, newState],
+      };
+    });
+  }, []);
 
   const removeState = useCallback((stateId: string) => {
     setAutomaton((prev) => ({
@@ -67,40 +78,39 @@ export function useAutomaton(initialAutomaton?: Partial<Automaton>) {
   }, []);
 
   const addTransition = useCallback((from: string, to: string, symbols: string[]) => {
-    // Check if transition already exists
-    const existingTransition = automaton.transitions.find(
-      (t) => t.from === from && t.to === to
-    );
+    setAutomaton((prev) => {
+      // Check if transition already exists
+      const existingTransition = prev.transitions.find(
+        (t) => t.from === from && t.to === to
+      );
 
-    if (existingTransition) {
-      // Merge symbols
-      setAutomaton((prev) => ({
+      if (existingTransition) {
+        // Merge symbols
+        return {
+          ...prev,
+          transitions: prev.transitions.map((t) =>
+            t.id === existingTransition.id
+              ? { ...t, symbols: Array.from(new Set([...t.symbols, ...symbols])) }
+              : t
+          ),
+          alphabet: Array.from(new Set([...prev.alphabet, ...symbols.filter(s => s !== 'ε')])),
+        };
+      }
+
+      const newTransition: Transition = {
+        id: generateId(),
+        from,
+        to,
+        symbols,
+      };
+
+      return {
         ...prev,
-        transitions: prev.transitions.map((t) =>
-          t.id === existingTransition.id
-            ? { ...t, symbols: Array.from(new Set([...t.symbols, ...symbols])) }
-            : t
-        ),
-        alphabet: Array.from(new Set([...prev.alphabet, ...symbols])),
-      }));
-      return existingTransition.id;
-    }
-
-    const newTransition: Transition = {
-      id: generateId(),
-      from,
-      to,
-      symbols,
-    };
-
-    setAutomaton((prev) => ({
-      ...prev,
-      transitions: [...prev.transitions, newTransition],
-      alphabet: Array.from(new Set([...prev.alphabet, ...symbols])),
-    }));
-
-    return newTransition.id;
-  }, [automaton.transitions]);
+        transitions: [...prev.transitions, newTransition],
+        alphabet: Array.from(new Set([...prev.alphabet, ...symbols.filter(s => s !== 'ε')])),
+      };
+    });
+  }, []);
 
   const updateTransition = useCallback((transitionId: string, updates: Partial<Transition>) => {
     setAutomaton((prev) => ({
@@ -121,6 +131,7 @@ export function useAutomaton(initialAutomaton?: Partial<Automaton>) {
   return {
     automaton,
     setAutomaton,
+    setAutomatonType,
     addState,
     removeState,
     updateState,
