@@ -1,15 +1,15 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { SimulationState } from '@/types/simulation';
 import './SimulationPanel.css';
 
 interface SimulationPanelProps {
   simulation: SimulationState | null;
-  onStart: (input: string) => void;
+  onStart: (inputString: string) => void;
   onStep: (direction: 'forward' | 'back') => void;
   onReset: () => void;
   onPlay: () => void;
   onPause: () => void;
-  validationErrors?: string[];
+  validationErrors: string[];
 }
 
 export function SimulationPanel({
@@ -19,26 +19,35 @@ export function SimulationPanel({
   onReset,
   onPlay,
   onPause,
-  validationErrors = [],
+  validationErrors,
 }: SimulationPanelProps) {
   const [inputString, setInputString] = useState('');
 
   const handleStart = () => {
-    if (inputString.trim() && validationErrors.length === 0) {
+    if (inputString) {
       onStart(inputString);
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
       handleStart();
     }
   };
 
-  const canStepForward = simulation && simulation.currentStep < simulation.steps.length - 1;
-  const canStepBack = simulation && simulation.currentStep > 0;
+  // Get state labels from window (exposed by Canvas)
+  const getStateLabel = (stateId: string): string => {
+    const helpers = (window as any).canvasHelpers;
+    if (helpers?.getAutomaton) {
+      const automaton = helpers.getAutomaton();
+      const state = automaton.states.find((s: any) => s.id === stateId);
+      return state?.label || stateId;
+    }
+    return stateId;
+  };
 
   const currentStep = simulation?.steps[simulation.currentStep];
+  const stateLabels = currentStep?.currentStates.map(getStateLabel).join(', ') || 'None';
 
   return (
     <div className="simulation-panel">
@@ -48,35 +57,40 @@ export function SimulationPanel({
 
       {validationErrors.length > 0 && (
         <div className="simulation-errors">
-          <h3>⚠️ Automaton Issues:</h3>
+          <h3>⚠️ Validation Errors</h3>
           <ul>
-            {validationErrors.map((error, i) => (
-              <li key={i}>{error}</li>
+            {validationErrors.map((error, index) => (
+              <li key={index}>{error}</li>
             ))}
           </ul>
         </div>
       )}
 
       <div className="simulation-input-section">
-        <label htmlFor="sim-input">Input String:</label>
+        <label>Input String:</label>
         <div className="simulation-input-group">
           <input
-            id="sim-input"
             type="text"
             className="simulation-input"
+            placeholder="Enter string to test..."
             value={inputString}
             onChange={(e) => setInputString(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Enter string to test..."
-            disabled={simulation?.isRunning}
+            onKeyPress={handleKeyPress}
+            disabled={!!simulation}
           />
-          <button
-            className="sim-button sim-button-primary"
-            onClick={handleStart}
-            disabled={!inputString.trim() || simulation?.isRunning || validationErrors.length > 0}
-          >
-            Start
-          </button>
+          {!simulation ? (
+            <button
+              className="sim-button sim-button-primary"
+              onClick={handleStart}
+              disabled={!inputString}
+            >
+              ▶
+            </button>
+          ) : (
+            <button className="sim-button" onClick={onReset}>
+              ↺
+            </button>
+          )}
         </div>
       </div>
 
@@ -86,7 +100,7 @@ export function SimulationPanel({
             <button
               className="sim-button"
               onClick={() => onStep('back')}
-              disabled={!canStepBack || simulation.isRunning}
+              disabled={simulation.currentStep === 0}
               title="Step Back"
             >
               ⏮
@@ -99,7 +113,7 @@ export function SimulationPanel({
               <button
                 className="sim-button"
                 onClick={onPlay}
-                disabled={!canStepForward}
+                disabled={simulation.currentStep >= simulation.steps.length - 1}
                 title="Play"
               >
                 ▶️
@@ -108,13 +122,10 @@ export function SimulationPanel({
             <button
               className="sim-button"
               onClick={() => onStep('forward')}
-              disabled={!canStepForward || simulation.isRunning}
+              disabled={simulation.currentStep >= simulation.steps.length - 1}
               title="Step Forward"
             >
               ⏭
-            </button>
-            <button className="sim-button" onClick={onReset} title="Reset">
-              🔄
             </button>
           </div>
 
@@ -122,8 +133,14 @@ export function SimulationPanel({
             <div className="simulation-progress">
               <div className="simulation-string">
                 <span className="consumed">{currentStep?.consumedInput}</span>
-                <span className="current">{currentStep?.remainingInput.charAt(0) || ''}</span>
-                <span className="remaining">{currentStep?.remainingInput.slice(1) || ''}</span>
+                {currentStep?.remainingInput && currentStep.remainingInput.length > 0 ? (
+                  <>
+                    <span className="current">{currentStep.remainingInput[0]}</span>
+                    <span className="remaining">{currentStep.remainingInput.slice(1)}</span>
+                  </>
+                ) : (
+                  <span className="remaining">∅</span>
+                )}
               </div>
               <div className="simulation-step-info">
                 Step {simulation.currentStep + 1} of {simulation.steps.length}
@@ -133,18 +150,14 @@ export function SimulationPanel({
             <div className="simulation-current-states">
               <strong>Current State{currentStep?.currentStates.length !== 1 ? 's' : ''}:</strong>{' '}
               {currentStep?.currentStates.length === 0 ? (
-                <span className="no-states">None (stuck)</span>
+                <span className="no-states">Stuck (No valid transitions)</span>
               ) : (
-                currentStep?.currentStates.join(', ') || 'None'
+                stateLabels
               )}
             </div>
 
-            {simulation.result !== 'running' && (
-              <div
-                className={`simulation-result ${
-                  simulation.result === 'accepted' ? 'accepted' : 'rejected'
-                }`}
-              >
+            {simulation.currentStep === simulation.steps.length - 1 && (
+              <div className={`simulation-result ${simulation.result}`}>
                 {simulation.result === 'accepted' ? '✓ Accepted' : '✗ Rejected'}
               </div>
             )}
