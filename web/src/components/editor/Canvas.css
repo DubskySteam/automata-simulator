@@ -11,6 +11,10 @@
   user-select: none;
 }
 
-.canvas:active {
+.canvas:hover {
+  cursor: grab;
+}
+
+.canvas.dragging {
   cursor: grabbing;
 }
