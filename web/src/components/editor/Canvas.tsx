@@ -51,7 +51,6 @@ export function Canvas({ width = 800, height = 600, toolMode }: CanvasProps) {
     toggleStateInitial,
     toggleStateAccept,
     addTransition,
-    removeTransition,
   } = useAutomaton({
     states: [
       {
@@ -81,7 +80,6 @@ export function Canvas({ width = 800, height = 600, toolMode }: CanvasProps) {
 
   const { states, transitions } = automaton;
 
-  // State mutation handlers
   const handleStateMove = useCallback(
     (stateId: string, newPosition: Position) => {
       updateState(stateId, { position: newPosition });
@@ -164,7 +162,6 @@ export function Canvas({ width = 800, height = 600, toolMode }: CanvasProps) {
     [toolMode, addState]
   );
 
-  // Keyboard shortcuts
   useKeyboardShortcuts({
     onDelete: () => {
       if (selectedStates.length > 0) {
@@ -179,7 +176,6 @@ export function Canvas({ width = 800, height = 600, toolMode }: CanvasProps) {
     },
   });
 
-  // Canvas interaction hook
   const { hoveredState, isDragging, isCreatingTransition, handlers } = useCanvasInteraction({
     states,
     onStateMove: handleStateMove,
@@ -253,7 +249,6 @@ export function Canvas({ width = 800, height = 600, toolMode }: CanvasProps) {
     [states, offset, zoom]
   );
 
-  // Build context menu items based on target
   const getContextMenuItems = useCallback((): ContextMenuItem[] => {
     if (!contextMenu?.target) return [];
 
@@ -296,7 +291,6 @@ export function Canvas({ width = 800, height = 600, toolMode }: CanvasProps) {
     return [];
   }, [contextMenu, states, toggleStateInitial, toggleStateAccept, removeState]);
 
-  // Initialize renderer
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -304,7 +298,6 @@ export function Canvas({ width = 800, height = 600, toolMode }: CanvasProps) {
     rendererRef.current = new CanvasRenderer(canvas);
   }, [canvasRef]);
 
-  // Render loop
   useEffect(() => {
     const canvas = canvasRef.current;
     const renderer = rendererRef.current;
@@ -404,8 +397,8 @@ export function Canvas({ width = 800, height = 600, toolMode }: CanvasProps) {
             addTransition(transitionModal.fromState, transitionModal.toState, symbols);
           }
         }}
-        fromLabel={states.find((s) => s.id === transitionModal?.fromState)?.label}
-        toLabel={states.find((s) => s.id === transitionModal?.toState)?.label}
+        fromLabel={transitionModal ? states.find((s) => s.id === transitionModal.fromState)?.label : undefined}
+        toLabel={transitionModal ? states.find((s) => s.id === transitionModal.toState)?.label : undefined}
       />
     </div>
   );

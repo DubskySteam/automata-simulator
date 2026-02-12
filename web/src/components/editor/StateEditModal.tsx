@@ -14,13 +14,14 @@ export function StateEditModal({ state, isOpen, onClose, onSave }: StateEditModa
   const [isInitial, setIsInitial] = useState(false);
   const [isAccept, setIsAccept] = useState(false);
 
+  // Reset form when modal opens with new state
   useEffect(() => {
-    if (state) {
+    if (state && isOpen) {
       setLabel(state.label);
       setIsInitial(state.isInitial);
       setIsAccept(state.isAccept);
     }
-  }, [state]);
+  }, [state?.id, isOpen]); // Only reset when state ID or open state changes
 
   const handleSave = () => {
     if (!state || !label.trim()) return;
