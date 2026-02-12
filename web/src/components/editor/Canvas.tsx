@@ -7,9 +7,9 @@ import { CanvasRenderer } from '@/lib/canvas/renderer';
 import { ContextMenu, ContextMenuItem } from '@/components/common/ContextMenu';
 import { StateEditModal } from './StateEditModal';
 import { TransitionModal } from './TransitionModal';
-import { Position, ToolMode, State } from '@/types';
+import { Position, ToolMode, State, Transition } from '@/types';
 import { CANVAS_CONSTANTS, CANVAS_COLORS } from '@/lib/canvas/constants';
-import { getCanvasCoordinates } from '@/lib/canvas/utils';
+import { getCanvasCoordinates, isPointOnTransition } from '@/lib/canvas/utils';
 import './Canvas.css';
 
 interface CanvasProps {
@@ -40,6 +40,7 @@ export function Canvas({ width = 800, height = 600, toolMode }: CanvasProps) {
   const [transitionModal, setTransitionModal] = useState<{
     fromState: string;
     toState: string;
+    editingTransitionId?: string;
   } | null>(null);
 
   // Use automaton hook
@@ -51,6 +52,8 @@ export function Canvas({ width = 800, height = 600, toolMode }: CanvasProps) {
     toggleStateInitial,
     toggleStateAccept,
     addTransition,
+    updateTransition,
+    removeTransition,
   } = useAutomaton({
     states: [
       {
@@ -79,6 +82,23 @@ export function Canvas({ width = 800, height = 600, toolMode }: CanvasProps) {
   });
 
   const { states, transitions } = automaton;
+
+  // Find transition at position
+  const findTransitionAtPosition = useCallback(
+    (pos: Position): Transition | null => {
+      for (let i = transitions.length - 1; i >= 0; i--) {
+        const transition = transitions[i];
+        const fromState = states.find((s) => s.id === transition.from);
+        const toState = states.find((s) => s.id === transition.to);
+
+        if (fromState && toState && isPointOnTransition(pos, transition, fromState, toState, 10)) {
+          return transition;
+        }
+      }
+      return null;
+    },
+    [transitions, states]
+  );
 
   const handleStateMove = useCallback(
     (stateId: string, newPosition: Position) => {
@@ -230,6 +250,7 @@ export function Canvas({ width = 800, height = 600, toolMode }: CanvasProps) {
       const canvas = event.currentTarget;
       const pos = getCanvasCoordinates(event, canvas, offset, zoom);
 
+      // Check for state first
       const clickedState = states.find((state) => {
         const dx = pos.x - state.position.x;
         const dy = pos.y - state.position.y;
@@ -242,11 +263,23 @@ export function Canvas({ width = 800, height = 600, toolMode }: CanvasProps) {
           y: event.clientY,
           target: { type: 'state', id: clickedState.id },
         });
-      } else {
-        setContextMenu(null);
+        return;
       }
+
+      // Check for transition
+      const clickedTransition = findTransitionAtPosition(pos);
+      if (clickedTransition) {
+        setContextMenu({
+          x: event.clientX,
+          y: event.clientY,
+          target: { type: 'transition', id: clickedTransition.id },
+        });
+        return;
+      }
+
+      setContextMenu(null);
     },
-    [states, offset, zoom]
+    [states, findTransitionAtPosition, offset, zoom]
   );
 
   const getContextMenuItems = useCallback((): ContextMenuItem[] => {
@@ -288,8 +321,39 @@ export function Canvas({ width = 800, height = 600, toolMode }: CanvasProps) {
       ];
     }
 
+    if (contextMenu.target.type === 'transition') {
+      const transition = transitions.find((t) => t.id === contextMenu.target.id);
+      if (!transition) return [];
+
+      const fromState = states.find((s) => s.id === transition.from);
+      const toState = states.find((s) => s.id === transition.to);
+
+      return [
+        {
+          label: 'Edit Transition',
+          icon: '✏️',
+          onClick: () => {
+            setTransitionModal({
+              fromState: transition.from,
+              toState: transition.to,
+              editingTransitionId: transition.id,
+            });
+          },
+        },
+        { separator: true } as ContextMenuItem,
+        {
+          label: 'Delete Transition',
+          icon: '🗑️',
+          destructive: true,
+          onClick: () => {
+            removeTransition(transition.id);
+          },
+        },
+      ];
+    }
+
     return [];
-  }, [contextMenu, states, toggleStateInitial, toggleStateAccept, removeState]);
+  }, [contextMenu, states, transitions, toggleStateInitial, toggleStateAccept, removeState, removeTransition]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -394,9 +458,20 @@ export function Canvas({ width = 800, height = 600, toolMode }: CanvasProps) {
         onClose={() => setTransitionModal(null)}
         onSave={(symbols) => {
           if (transitionModal) {
-            addTransition(transitionModal.fromState, transitionModal.toState, symbols);
+            if (transitionModal.editingTransitionId) {
+              // Edit existing transition
+              updateTransition(transitionModal.editingTransitionId, { symbols });
+            } else {
+              // Add new transition
+              addTransition(transitionModal.fromState, transitionModal.toState, symbols);
+            }
           }
         }}
+        initialSymbols={
+          transitionModal?.editingTransitionId
+            ? transitions.find((t) => t.id === transitionModal.editingTransitionId)?.symbols
+            : undefined
+        }
         fromLabel={transitionModal ? states.find((s) => s.id === transitionModal.fromState)?.label : undefined}
         toLabel={transitionModal ? states.find((s) => s.id === transitionModal.toState)?.label : undefined}
       />

@@ -1,4 +1,4 @@
-import { Position } from '@/types';
+import { Position, State, Transition } from '@/types';
 import { CANVAS_CONSTANTS } from './constants';
 
 export function snapToGrid(pos: Position, gridSize: number): Position {
@@ -33,4 +33,53 @@ export function getCanvasCoordinates(
 
 export function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+}
+
+// Distance from point to line segment
+function distanceToLineSegment(
+  point: Position,
+  lineStart: Position,
+  lineEnd: Position
+): number {
+  const dx = lineEnd.x - lineStart.x;
+  const dy = lineEnd.y - lineStart.y;
+  const lengthSquared = dx * dx + dy * dy;
+
+  if (lengthSquared === 0) {
+    return getDistance(point, lineStart);
+  }
+
+  let t = ((point.x - lineStart.x) * dx + (point.y - lineStart.y) * dy) / lengthSquared;
+  t = Math.max(0, Math.min(1, t));
+
+  const closestPoint = {
+    x: lineStart.x + t * dx,
+    y: lineStart.y + t * dy,
+  };
+
+  return getDistance(point, closestPoint);
+}
+
+// Check if point is near a transition
+export function isPointOnTransition(
+  point: Position,
+  transition: Transition,
+  fromState: State,
+  toState: State,
+  threshold: number = 10
+): boolean {
+  // Handle self-loop
+  if (fromState.id === toState.id) {
+    const loopCenter = {
+      x: fromState.position.x,
+      y: fromState.position.y - CANVAS_CONSTANTS.STATE_RADIUS - CANVAS_CONSTANTS.STATE_RADIUS * 0.8,
+    };
+    const loopRadius = CANVAS_CONSTANTS.STATE_RADIUS * 0.8;
+    const distance = Math.abs(getDistance(point, loopCenter) - loopRadius);
+    return distance <= threshold;
+  }
+
+  // Regular transition (simplified - check line segment)
+  const distance = distanceToLineSegment(point, fromState.position, toState.position);
+  return distance <= threshold;
 }
