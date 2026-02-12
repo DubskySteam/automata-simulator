@@ -128,17 +128,20 @@ export function useAutomaton(initialAutomaton?: Partial<Automaton>) {
     }));
   }, []);
 
-  return {
-    automaton,
-    setAutomaton,
-    setAutomatonType,
-    addState,
-    removeState,
-    updateState,
-    toggleStateInitial,
-    toggleStateAccept,
-    addTransition,
-    updateTransition,
-    removeTransition,
-  };
+  const loadAutomaton = useCallback((newAutomaton: Automaton) => {
+    setAutomaton(newAutomaton);
+  }, []);
+
+return {
+  automaton,
+  addState,
+  removeState,
+  updateState,
+  toggleStateInitial,
+  toggleStateAccept,
+  addTransition,
+  updateTransition,
+  removeTransition,
+  loadAutomaton,
+};
 }

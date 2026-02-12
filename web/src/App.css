@@ -84,7 +84,8 @@
   display: flex;
   overflow: hidden;
   background-color: var(--bg-secondary);
-  min-height: 0; /* Important for flex children */
+  min-height: 0;
+  position: relative;
 }
 
 .footer {

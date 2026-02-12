@@ -24,12 +24,13 @@ interface CanvasProps {
   onSimulationChange?: (simulation: SimulationState | null) => void;
   onValidationChange?: (errors: string[]) => void;
   animationsEnabled?: boolean;
+  onLoadAutomaton?: (automaton: Automaton) => void;
 }
 
-export function Canvas({ 
-  width = 800, 
-  height = 600, 
-  toolMode, 
+export function Canvas({
+  width: propWidth,
+  height: propHeight,
+  toolMode,
   showSimulation = false,
   automatonType = 'NFA',
   onAutomatonTypeChange,
@@ -37,7 +38,11 @@ export function Canvas({
   onValidationChange,
   animationsEnabled = true,
 }: CanvasProps) {
-  const canvasRef = useCanvas({ width, height });
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [containerSize, setContainerSize] = useState({
+    width: propWidth || 800,
+    height: propHeight || 600,
+  });
   const rendererRef = useRef<CanvasRenderer | null>(null);
   const [offset, setOffset] = useState<Position>({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
@@ -77,6 +82,7 @@ export function Canvas({
     addTransition,
     updateTransition,
     removeTransition,
+    loadAutomaton,
   } = useAutomaton({
     type: automatonType,
     states: [
@@ -139,44 +145,79 @@ export function Canvas({
     }
   }, [showSimulation]);
 
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        setContainerSize({ width, height });
+      }
+    });
+
+    resizeObserver.observe(container);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, []);
+
+  const width = containerSize.width;
+  const height = containerSize.height;
+
+  const canvasRef = useCanvas({ width, height });
+
   // Expose canvas helpers to parent (for epsilon transition cleanup)
   useEffect(() => {
-    (window as any).canvasHelpers = {
-      hasEpsilonTransitions: () => {
-        return transitions.some((t) => t.symbols.includes('ε'));
-      },
-      removeEpsilonTransitions: () => {
-        const epsilonTransitionIds: string[] = [];
-        const transitionsToUpdate: Array<{ id: string; symbols: string[] }> = [];
+  (window as any).canvasHelpers = {
+    hasEpsilonTransitions: () => {
+      return transitions.some((t) => t.symbols.includes('ε'));
+    },
+    removeEpsilonTransitions: () => {
+      const epsilonTransitionIds: string[] = [];
+      const transitionsToUpdate: Array<{ id: string; symbols: string[] }> = [];
 
-        transitions.forEach((t) => {
-          if (t.symbols.includes('ε')) {
-            const newSymbols = t.symbols.filter((s) => s !== 'ε');
-            if (newSymbols.length === 0) {
-              epsilonTransitionIds.push(t.id);
-            } else {
-              transitionsToUpdate.push({ id: t.id, symbols: newSymbols });
-            }
+      transitions.forEach((t) => {
+        if (t.symbols.includes('ε')) {
+          const newSymbols = t.symbols.filter((s) => s !== 'ε');
+          if (newSymbols.length === 0) {
+            epsilonTransitionIds.push(t.id);
+          } else {
+            transitionsToUpdate.push({ id: t.id, symbols: newSymbols });
           }
-        });
+        }
+      });
 
-        // Remove transitions that only have epsilon
-        epsilonTransitionIds.forEach((id) => removeTransition(id));
-        
-        // Update transitions that have epsilon + other symbols
-        transitionsToUpdate.forEach(({ id, symbols }) => 
-          updateTransition(id, { symbols })
-        );
-      },
-    };
-  }, [transitions, removeTransition, updateTransition]);
+      epsilonTransitionIds.forEach((id) => removeTransition(id));
+      transitionsToUpdate.forEach(({ id, symbols }) => 
+        updateTransition(id, { symbols })
+      );
+    },
+    exportToPNG: () => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+
+      const link = document.createElement('a');
+      link.download = `automaton-${Date.now()}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    },
+    getAutomaton: () => {
+      return automaton;
+    },
+    loadAutomaton: (newAutomaton: Automaton) => {
+      loadAutomaton(newAutomaton);
+    },
+};
+}, [transitions, removeTransition, updateTransition, automaton, canvasRef, loadAutomaton]);
 
   // Animation loop for breathing effect
   useEffect(() => {
     if (!animationsEnabled) return;
-    
+
     let startTime = Date.now();
-    
+
     const animate = () => {
       const elapsed = (Date.now() - startTime) / 1000;
       setAnimationTime(elapsed);
@@ -221,9 +262,7 @@ export function Canvas({
   const handleStateSelect = useCallback((stateId: string, multiSelect: boolean) => {
     setSelectedStates((prev) => {
       if (multiSelect) {
-        return prev.includes(stateId)
-          ? prev.filter((id) => id !== stateId)
-          : [...prev, stateId];
+        return prev.includes(stateId) ? prev.filter((id) => id !== stateId) : [...prev, stateId];
       }
       return [stateId];
     });
@@ -278,10 +317,7 @@ export function Canvas({
         position.y - lastClickPosRef.current.y
       );
 
-      if (
-        timeSinceLastClick < CANVAS_CONSTANTS.DOUBLE_CLICK_THRESHOLD &&
-        distance < 10
-      ) {
+      if (timeSinceLastClick < CANVAS_CONSTANTS.DOUBLE_CLICK_THRESHOLD && distance < 10) {
         addState(position);
         lastClickTimeRef.current = 0;
       } else {
@@ -305,8 +341,12 @@ export function Canvas({
       isPaused: false,
       currentStep: 0,
       steps,
-      result: steps.length > 0 && steps[steps.length - 1].remainingInput === '' ? 
-        (accepted ? 'accepted' : 'rejected') : 'rejected',
+      result:
+        steps.length > 0 && steps[steps.length - 1].remainingInput === ''
+          ? accepted
+            ? 'accepted'
+            : 'rejected'
+          : 'rejected',
       inputString,
     });
   }, []);
@@ -402,10 +442,7 @@ export function Canvas({
       if (result) {
         setZoom((prev) => {
           const newZoom = prev + result.zoomDelta;
-          return Math.max(
-            CANVAS_CONSTANTS.MIN_ZOOM,
-            Math.min(CANVAS_CONSTANTS.MAX_ZOOM, newZoom)
-          );
+          return Math.max(CANVAS_CONSTANTS.MIN_ZOOM, Math.min(CANVAS_CONSTANTS.MAX_ZOOM, newZoom));
         });
       }
     },
@@ -534,7 +571,15 @@ export function Canvas({
     }
 
     return [];
-  }, [contextMenu, states, transitions, toggleStateInitial, toggleStateAccept, removeState, removeTransition]);
+  }, [
+    contextMenu,
+    states,
+    transitions,
+    toggleStateInitial,
+    toggleStateAccept,
+    removeState,
+    removeTransition,
+  ]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -577,7 +622,7 @@ export function Canvas({
       if (fromState && toState) {
         const key = `${transition.from}-${transition.to}`;
         const hasReverse = reverseTransitionMap.get(key) || false;
-        
+
         renderer.drawTransition(transition, fromState, toState, offset, zoom, {
           hasReverse,
         });
@@ -641,7 +686,7 @@ export function Canvas({
 
   return (
     <>
-      <div className="canvas-container">
+      <div ref={containerRef} className="canvas-container">
         <canvas
           ref={canvasRef}
           className={`canvas ${getCursorClass()}`}
@@ -684,8 +729,14 @@ export function Canvas({
             ? transitions.find((t) => t.id === transitionModal.editingTransitionId)?.symbols
             : undefined
         }
-        fromLabel={transitionModal ? states.find((s) => s.id === transitionModal.fromState)?.label : undefined}
-        toLabel={transitionModal ? states.find((s) => s.id === transitionModal.toState)?.label : undefined}
+        fromLabel={
+          transitionModal
+            ? states.find((s) => s.id === transitionModal.fromState)?.label
+            : undefined
+        }
+        toLabel={
+          transitionModal ? states.find((s) => s.id === transitionModal.toState)?.label : undefined
+        }
       />
     </>
   );

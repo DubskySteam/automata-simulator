@@ -6,9 +6,20 @@ interface ToolbarProps {
   onToolModeChange: (mode: ToolMode) => void;
   automatonType: AutomatonType;
   onAutomatonTypeChange: (type: AutomatonType) => void;
+  onExportPNG?: () => void;
+  onExportJSON?: () => void;
+  onImportJSON?: () => void;
 }
 
-export function Toolbar({ toolMode, onToolModeChange, automatonType, onAutomatonTypeChange }: ToolbarProps) {
+export function Toolbar({ 
+  toolMode, 
+  onToolModeChange, 
+  automatonType, 
+  onAutomatonTypeChange,
+  onExportPNG,
+  onExportJSON,
+  onImportJSON,
+}: ToolbarProps) {
   return (
     <div className="toolbar">
       <div className="toolbar-section">
@@ -78,6 +89,47 @@ export function Toolbar({ toolMode, onToolModeChange, automatonType, onAutomaton
               </defs>
             </svg>
             <span>Transition</span>
+          </button>
+        </div>
+      </div>
+
+      <div className="toolbar-section">
+        <h3 className="toolbar-title">File</h3>
+        <div className="toolbar-buttons">
+          <button
+            className="toolbar-button"
+            onClick={onExportPNG}
+            title="Export as PNG"
+          >
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="3" y="3" width="14" height="14" rx="2" />
+              <circle cx="7.5" cy="7.5" r="1.5" fill="currentColor" />
+              <path d="M3 13 L6 10 L9 13 L13 9 L17 13 L17 17 L3 17 Z" fill="currentColor" stroke="none" />
+            </svg>
+            <span>PNG</span>
+          </button>
+
+          <button
+            className="toolbar-button"
+            onClick={onExportJSON}
+            title="Export as JSON"
+          >
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M13 3 L17 7 L17 17 L3 17 L3 3 Z M13 3 L13 7 L17 7" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"/>
+            </svg>
+            <span>Export</span>
+          </button>
+
+          <button
+            className="toolbar-button"
+            onClick={onImportJSON}
+            title="Import from JSON"
+          >
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M10 3 L10 12 M7 9 L10 12 L13 9" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M4 17 L16 17" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+            </svg>
+            <span>Import</span>
           </button>
         </div>
       </div>
