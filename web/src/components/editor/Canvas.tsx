@@ -4,7 +4,8 @@ import { useCanvasInteraction } from '@/hooks/useCanvasInteraction';
 import { useAutomaton } from '@/hooks/useAutomaton';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { CanvasRenderer } from '@/lib/canvas/renderer';
-import { Position, ToolMode } from '@/types';
+import { ContextMenu, ContextMenuItem } from '@/components/common/ContextMenu';
+import { Position, ToolMode, State } from '@/types';
 import { CANVAS_CONSTANTS, CANVAS_COLORS } from '@/lib/canvas/constants';
 import { getCanvasCoordinates } from '@/lib/canvas/utils';
 import './Canvas.css';
@@ -28,6 +29,11 @@ export function Canvas({ width = 800, height = 600, toolMode }: CanvasProps) {
     toState?: string;
   } | null>(null);
   const [mousePos, setMousePos] = useState<Position>({ x: 0, y: 0 });
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    target: { type: 'state'; id: string } | { type: 'transition'; id: string } | null;
+  } | null>(null);
 
   // Use automaton hook
   const {
@@ -35,8 +41,10 @@ export function Canvas({ width = 800, height = 600, toolMode }: CanvasProps) {
     addState,
     removeState,
     updateState,
+    toggleStateInitial,
     toggleStateAccept,
     addTransition,
+    removeTransition,
   } = useAutomaton({
     states: [
       {
@@ -85,15 +93,12 @@ export function Canvas({ width = 800, height = 600, toolMode }: CanvasProps) {
     });
   }, []);
 
-  // Handle state click (for transition mode)
   const handleStateClick = useCallback(
     (stateId: string, event: React.MouseEvent) => {
       if (toolMode === 'addTransition') {
         if (!transitionDraft) {
-          // Start transition
           setTransitionDraft({ fromState: stateId });
         } else {
-          // Complete transition
           const symbols = prompt('Enter transition symbol(s) (comma-separated):');
           if (symbols) {
             const symbolArray = symbols.split(',').map((s) => s.trim()).filter((s) => s);
@@ -104,7 +109,6 @@ export function Canvas({ width = 800, height = 600, toolMode }: CanvasProps) {
           setTransitionDraft(null);
         }
       } else if (toolMode === 'select') {
-        // In select mode, use default select behavior
         handleStateSelect(stateId, event.shiftKey);
       }
     },
@@ -134,18 +138,15 @@ export function Canvas({ width = 800, height = 600, toolMode }: CanvasProps) {
   const handleCanvasClick = useCallback(
     (position: Position, event: React.MouseEvent) => {
       if (toolMode === 'addState') {
-        // Add state mode: create state on click
         addState(position);
         return;
       }
 
       if (toolMode === 'addTransition') {
-        // Cancel transition if clicking on empty canvas
         setTransitionDraft(null);
         return;
       }
 
-      // Select mode: check for double-click
       const now = Date.now();
       const timeSinceLastClick = now - lastClickTimeRef.current;
       const distance = Math.hypot(
@@ -157,11 +158,9 @@ export function Canvas({ width = 800, height = 600, toolMode }: CanvasProps) {
         timeSinceLastClick < CANVAS_CONSTANTS.DOUBLE_CLICK_THRESHOLD &&
         distance < 10
       ) {
-        // Double-click: create new state
         addState(position);
         lastClickTimeRef.current = 0;
       } else {
-        // Single click: deselect all
         setSelectedStates([]);
         lastClickTimeRef.current = now;
         lastClickPosRef.current = position;
@@ -200,7 +199,6 @@ export function Canvas({ width = 800, height = 600, toolMode }: CanvasProps) {
     enabled: true,
   });
 
-  // Handle zoom
   const handleWheel = useCallback(
     (event: React.WheelEvent<HTMLCanvasElement>) => {
       const result = handlers.onWheel(event);
@@ -217,7 +215,6 @@ export function Canvas({ width = 800, height = 600, toolMode }: CanvasProps) {
     [handlers]
   );
 
-  // Handle mouse move
   const handleMouseMove = useCallback(
     (event: React.MouseEvent<HTMLCanvasElement>) => {
       const canvas = event.currentTarget;
@@ -235,17 +232,13 @@ export function Canvas({ width = 800, height = 600, toolMode }: CanvasProps) {
     [handlers, toolMode, offset, zoom]
   );
 
-  // Handle right-click for context menu
   const handleContextMenu = useCallback(
     (event: React.MouseEvent<HTMLCanvasElement>) => {
       event.preventDefault();
 
-      if (toolMode !== 'select') return;
-
       const canvas = event.currentTarget;
       const pos = getCanvasCoordinates(event, canvas, offset, zoom);
-      
-      // Find state at position
+
       const clickedState = states.find((state) => {
         const dx = pos.x - state.position.x;
         const dy = pos.y - state.position.y;
@@ -253,11 +246,63 @@ export function Canvas({ width = 800, height = 600, toolMode }: CanvasProps) {
       });
 
       if (clickedState) {
-        toggleStateAccept(clickedState.id);
+        setContextMenu({
+          x: event.clientX,
+          y: event.clientY,
+          target: { type: 'state', id: clickedState.id },
+        });
+      } else {
+        setContextMenu(null);
       }
     },
-    [toolMode, states, offset, zoom, toggleStateAccept]
+    [states, offset, zoom]
   );
+
+  // Build context menu items based on target
+  const getContextMenuItems = useCallback((): ContextMenuItem[] => {
+    if (!contextMenu?.target) return [];
+
+    if (contextMenu.target.type === 'state') {
+      const state = states.find((s) => s.id === contextMenu.target.id);
+      if (!state) return [];
+
+      return [
+        {
+          label: 'Edit Label',
+          icon: '✏️',
+          onClick: () => {
+            const newLabel = prompt('Enter new label:', state.label);
+            if (newLabel && newLabel.trim()) {
+              updateState(state.id, { label: newLabel.trim() });
+            }
+          },
+        },
+        { separator: true } as ContextMenuItem,
+        {
+          label: state.isInitial ? 'Unset Initial State' : 'Set as Initial State',
+          icon: '▶️',
+          onClick: () => toggleStateInitial(state.id),
+        },
+        {
+          label: state.isAccept ? 'Unset Accept State' : 'Set as Accept State',
+          icon: '⭕',
+          onClick: () => toggleStateAccept(state.id),
+        },
+        { separator: true } as ContextMenuItem,
+        {
+          label: 'Delete State',
+          icon: '🗑️',
+          destructive: true,
+          onClick: () => {
+            removeState(state.id);
+            setSelectedStates((prev) => prev.filter((id) => id !== state.id));
+          },
+        },
+      ];
+    }
+
+    return [];
+  }, [contextMenu, states, updateState, toggleStateInitial, toggleStateAccept, removeState]);
 
   // Initialize renderer
   useEffect(() => {
@@ -276,7 +321,6 @@ export function Canvas({ width = 800, height = 600, toolMode }: CanvasProps) {
     renderer.clear(width, height);
     renderer.drawGrid(width, height, offset, zoom);
 
-    // Draw transitions
     transitions.forEach((transition) => {
       const fromState = states.find((s) => s.id === transition.from);
       const toState = states.find((s) => s.id === transition.to);
@@ -285,7 +329,6 @@ export function Canvas({ width = 800, height = 600, toolMode }: CanvasProps) {
       }
     });
 
-    // Draw draft transition (both modes)
     if ((transitionDraft || isCreatingTransition) && transitionDraft) {
       const fromState = states.find((s) => s.id === transitionDraft.fromState);
       if (fromState) {
@@ -308,7 +351,6 @@ export function Canvas({ width = 800, height = 600, toolMode }: CanvasProps) {
       }
     }
 
-    // Draw states
     states.forEach((state) => {
       const isHighlighted = transitionDraft?.fromState === state.id;
       renderer.drawState(state, offset, zoom, {
@@ -330,7 +372,6 @@ export function Canvas({ width = 800, height = 600, toolMode }: CanvasProps) {
     mousePos,
   ]);
 
-  // Get cursor style based on tool mode
   const getCursorClass = () => {
     if (toolMode === 'addState') return 'cursor-crosshair';
     if (toolMode === 'addTransition' || isCreatingTransition) return 'cursor-pointer';
@@ -349,6 +390,14 @@ export function Canvas({ width = 800, height = 600, toolMode }: CanvasProps) {
         onWheel={handleWheel}
         onContextMenu={handleContextMenu}
       />
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          items={getContextMenuItems()}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
     </div>
   );
 }
