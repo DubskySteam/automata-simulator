@@ -130,6 +130,12 @@ export function Canvas({
     }
   }, [loadAutomaton]);
 
+  useEffect(() => {
+    if (automaton.type !== automatonType) {
+      loadAutomaton({ ...automaton, type: automatonType });
+    }
+  }, [automatonType]);
+
   const { states, transitions } = automaton;
 
   // Get active states for visual feedback (declared early to avoid reference errors)
