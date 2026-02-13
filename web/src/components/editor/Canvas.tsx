@@ -12,6 +12,7 @@ import { Position, ToolMode, State, Transition, AutomatonType } from '@/types';
 import { SimulationState } from '@/types/simulation';
 import { CANVAS_CONSTANTS, getCanvasColors } from '@/lib/canvas/constants';
 import { getCanvasCoordinates, isPointOnTransition } from '@/lib/canvas/utils';
+import { storage } from '@/lib/storage';
 import './Canvas.css';
 
 interface CanvasProps {
@@ -70,20 +71,14 @@ export function Canvas({
   const playIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const [animationTime, setAnimationTime] = useState(0);
   const animationFrameRef = useRef<number | null>(null);
+  const [view, setView] = useState<{ x: number; y: number; scale: number }>({
+    x: 0,
+    y: 0,
+    scale: 1,
+  });
 
   // Use automaton hook
-  const {
-    automaton,
-    addState,
-    removeState,
-    updateState,
-    toggleStateInitial,
-    toggleStateAccept,
-    addTransition,
-    updateTransition,
-    removeTransition,
-    loadAutomaton,
-  } = useAutomaton({
+  const DEFAULT_AUTOMATON = {
     type: automatonType,
     states: [
       {
@@ -109,7 +104,31 @@ export function Canvas({
         symbols: ['a', 'b'],
       },
     ],
-  });
+    alphabet: [],
+  };
+
+  const {
+    automaton,
+    addState,
+    removeState,
+    updateState,
+    toggleStateInitial,
+    toggleStateAccept,
+    addTransition,
+    updateTransition,
+    removeTransition,
+    loadAutomaton,
+    clearAutomaton,
+  } = useAutomaton(DEFAULT_AUTOMATON);
+
+  useEffect(() => {
+    // Try to restore from localStorage on mount
+    const saved = storage.load();
+    if (saved && saved.states.length > 0) {
+      console.log('Restoring saved automaton from localStorage');
+      loadAutomaton(saved);
+    }
+  }, [loadAutomaton]);
 
   const { states, transitions } = automaton;
 
@@ -170,47 +189,59 @@ export function Canvas({
 
   // Expose canvas helpers to parent (for epsilon transition cleanup)
   useEffect(() => {
-  (window as any).canvasHelpers = {
-    hasEpsilonTransitions: () => {
-      return transitions.some((t) => t.symbols.includes('ε'));
-    },
-    removeEpsilonTransitions: () => {
-      const epsilonTransitionIds: string[] = [];
-      const transitionsToUpdate: Array<{ id: string; symbols: string[] }> = [];
+    (window as any).canvasHelpers = {
+      hasEpsilonTransitions: () => {
+        return transitions.some((t) => t.symbols.includes('ε'));
+      },
+      removeEpsilonTransitions: () => {
+        const epsilonTransitionIds: string[] = [];
+        const transitionsToUpdate: Array<{ id: string; symbols: string[] }> = [];
 
-      transitions.forEach((t) => {
-        if (t.symbols.includes('ε')) {
-          const newSymbols = t.symbols.filter((s) => s !== 'ε');
-          if (newSymbols.length === 0) {
-            epsilonTransitionIds.push(t.id);
-          } else {
-            transitionsToUpdate.push({ id: t.id, symbols: newSymbols });
+        transitions.forEach((t) => {
+          if (t.symbols.includes('ε')) {
+            const newSymbols = t.symbols.filter((s) => s !== 'ε');
+            if (newSymbols.length === 0) {
+              epsilonTransitionIds.push(t.id);
+            } else {
+              transitionsToUpdate.push({ id: t.id, symbols: newSymbols });
+            }
           }
-        }
-      });
+        });
 
-      epsilonTransitionIds.forEach((id) => removeTransition(id));
-      transitionsToUpdate.forEach(({ id, symbols }) => 
-        updateTransition(id, { symbols })
-      );
-    },
-    exportToPNG: () => {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
+        epsilonTransitionIds.forEach((id) => removeTransition(id));
+        transitionsToUpdate.forEach(({ id, symbols }) => updateTransition(id, { symbols }));
+      },
+      exportToPNG: () => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
 
-      const link = document.createElement('a');
-      link.download = `automaton-${Date.now()}.png`;
-      link.href = canvas.toDataURL('image/png');
-      link.click();
-    },
-    getAutomaton: () => {
-      return automaton;
-    },
-    loadAutomaton: (newAutomaton: Automaton) => {
-      loadAutomaton(newAutomaton);
-    },
-};
-}, [transitions, removeTransition, updateTransition, automaton, canvasRef, loadAutomaton]);
+        const link = document.createElement('a');
+        link.download = `automaton-${Date.now()}.png`;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+      },
+      getAutomaton: () => {
+        return automaton;
+      },
+      loadAutomaton: (newAutomaton: Automaton) => {
+        console.log('Loading automaton:', newAutomaton);
+        loadAutomaton(newAutomaton);
+      },
+      clearWorkspace: () => {
+        loadAutomaton(DEFAULT_AUTOMATON);
+        setView({ x: 0, y: 0, scale: 1 });
+      },
+    };
+  }, [
+    transitions,
+    removeTransition,
+    updateTransition,
+    automaton,
+    canvasRef,
+    loadAutomaton,
+    clearAutomaton,
+    setView,
+  ]);
 
   // Animation loop for breathing effect
   useEffect(() => {
