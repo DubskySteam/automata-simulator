@@ -56,22 +56,27 @@ export class CanvasRenderer {
 
     let fillColor = CANVAS_COLORS.state.default;
     let borderColor = CANVAS_COLORS.state.border;
-    
+
     if (options.isActive) {
       fillColor = CANVAS_COLORS.state.active;
       borderColor = CANVAS_COLORS.state.borderActive;
-      
-      // Enhanced breathing animation
+
       if (options.animationTime !== undefined) {
-        const pulse = Math.sin(options.animationTime * 2.5) * 0.15 + 1; // Increased from 0.05 to 0.15
+        const pulse = Math.sin(options.animationTime * 2.5) * 0.15 + 1;
         const animatedRadius = radius * pulse;
-        
-        // Stronger outer glow
-        const gradient = this.ctx.createRadialGradient(x, y, animatedRadius * 0.5, x, y, animatedRadius * 1.5);
-        gradient.addColorStop(0, 'rgba(239, 83, 80, 0.6)'); // Increased from 0.3
-        gradient.addColorStop(0.5, 'rgba(239, 83, 80, 0.3)'); // Added middle stop
+
+        const gradient = this.ctx.createRadialGradient(
+          x,
+          y,
+          animatedRadius * 0.5,
+          x,
+          y,
+          animatedRadius * 1.5
+        );
+        gradient.addColorStop(0, 'rgba(239, 83, 80, 0.6)');
+        gradient.addColorStop(0.5, 'rgba(239, 83, 80, 0.3)');
         gradient.addColorStop(1, 'rgba(239, 83, 80, 0)');
-        
+
         this.ctx.beginPath();
         this.ctx.arc(x, y, animatedRadius * 1.5, 0, Math.PI * 2);
         this.ctx.fillStyle = gradient;
@@ -98,12 +103,12 @@ export class CanvasRenderer {
     this.ctx.arc(x, y, radius, 0, Math.PI * 2);
     this.ctx.fillStyle = fillColor;
     this.ctx.fill();
-    
+
     this.ctx.shadowColor = 'transparent';
     this.ctx.shadowBlur = 0;
     this.ctx.shadowOffsetX = 0;
     this.ctx.shadowOffsetY = 0;
-    
+
     this.ctx.strokeStyle = borderColor;
     this.ctx.lineWidth = CANVAS_CONSTANTS.STATE_BORDER_WIDTH * zoom;
     this.ctx.stroke();
@@ -119,6 +124,7 @@ export class CanvasRenderer {
     if (state.isInitial) {
       const arrowStart = x - radius - 25 * zoom;
       const arrowEnd = x - radius - 2 * zoom;
+
       this.ctx.beginPath();
       this.ctx.moveTo(arrowStart, y);
       this.ctx.lineTo(arrowEnd, y);
@@ -177,7 +183,6 @@ export class CanvasRenderer {
 
     const angle = Math.atan2(toY - fromY, toX - fromX);
     const radius = CANVAS_CONSTANTS.STATE_RADIUS * zoom;
-
     const startX = fromX + Math.cos(angle) * radius;
     const startY = fromY + Math.sin(angle) * radius;
     const endX = toX - Math.cos(angle) * (radius + 2 * zoom);
@@ -186,7 +191,6 @@ export class CanvasRenderer {
     if (options.hasReverse) {
       const midX = (startX + endX) / 2;
       const midY = (startY + endY) / 2;
-      
       const curveOffset = 25 * zoom;
       const perpAngle = angle + Math.PI / 2;
       const controlX = midX + Math.cos(perpAngle) * curveOffset;
@@ -200,7 +204,6 @@ export class CanvasRenderer {
       const dx = endX - controlX;
       const dy = endY - controlY;
       const endAngle = Math.atan2(dy, dx);
-      
       this.drawArrowHead(endX, endY, endAngle, strokeColor, zoom);
 
       const labelX = (startX + controlX + endX) / 3 + Math.cos(perpAngle) * 5 * zoom;
@@ -225,36 +228,41 @@ export class CanvasRenderer {
     this.ctx.font = `${13 * zoom}px sans-serif`;
     this.ctx.textAlign = 'center';
     this.ctx.textBaseline = 'middle';
-    
+
     const metrics = this.ctx.measureText(label);
     const padding = 4 * zoom;
     const bgWidth = metrics.width + padding * 2;
     const bgHeight = 18 * zoom;
-    
+
     this.ctx.fillStyle = CANVAS_COLORS.canvas.background;
     this.ctx.fillRect(x - bgWidth / 2, y - bgHeight / 2, bgWidth, bgHeight);
-    
+
     this.ctx.fillStyle = CANVAS_COLORS.text.transition;
     this.ctx.fillText(label, x, y);
   }
 
+  // Holy fuck, kill me already
   private drawSelfLoop(x: number, y: number, zoom: number, label: string, color: string): void {
     const radius = CANVAS_CONSTANTS.STATE_RADIUS * zoom;
-    const loopRadius = radius * 0.8;
-    const loopCenterY = y - radius - loopRadius * 0.7;
+    const loopRadius = radius * 0.85;
+    const loopOffset = radius + loopRadius * 0.6;
+    const loopCenterY = y - loopOffset;
 
+    // Draw the circular loop
     this.ctx.beginPath();
-    this.ctx.arc(x, loopCenterY, loopRadius, 0.4, Math.PI - 0.4);
+    this.ctx.arc(x, loopCenterY, loopRadius, 0.3, Math.PI * 2 - 0.3);
     this.ctx.stroke();
 
-    const arrowAngle = Math.PI - 0.4;
+    // Draw arrow head
+    const arrowAngle = -0.3;
     const arrowX = x + loopRadius * Math.cos(arrowAngle);
     const arrowY = loopCenterY + loopRadius * Math.sin(arrowAngle);
-    
-    const arrowDirection = arrowAngle + Math.PI * 0.5;
+    const arrowDirection = arrowAngle - Math.PI / 2;
+
     this.drawArrowHead(arrowX, arrowY, arrowDirection, color, zoom);
 
-    const labelY = loopCenterY - loopRadius - 8 * zoom;
+    // Draw label
+    const labelY = loopCenterY - loopRadius - 10 * zoom;
     this.drawTransitionLabel(label, x, labelY, zoom);
   }
 

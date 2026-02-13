@@ -1,49 +1,61 @@
-# Automata Simulator
+# Automata Visualizer
 
-An interactive web application for creating, editing, and simulating Deterministic and Nondeterministic Finite Automata (DFA/NFA). Features a visual drag-and-drop editor with real-time animation and automatic NFA→DFA conversion.
+An interactive web application for creating, editing, and simulating Deterministic and Nondeterministic Finite Automata (DFA/NFA). Features a modern visual editor with real-time simulation, validation, and automatic save.
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.6-blue.svg)](https://www.typescriptlang.org/)
+[![React](https://img.shields.io/badge/React-18-blue.svg)](https://reactjs.org/)
+[![License](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE)
 
-[**Live Demo**](https://dubskysteam.github.io/automata-simulator) | [**Documentation**](./docs) | [**Examples**](./docs/examples.md)
-
-![Screenshot](docs/images/screenshot.png)
+[**Live Demo**](https://dubskysteam.github.io/automata-simulator) | [**Report Bug**](https://github.com/dubskysteam/automata-simulator/issues) | [**Request Feature**](https://github.com/dubskysteam/automata-simulator/issues)
 
 ---
 
 ## ✨ Features
 
-### Visual Editor
-- **Drag-and-drop interface** - Double-click to create states, shift-drag to create transitions
-- **Interactive graph editing** - Move, rename, and delete states with intuitive controls
-- **Automatic layout** - Force-directed graph layout for clean visualization
-- **Multi-select** - Select and move multiple states at once
-- **Undo/redo** - Full history support with Ctrl+Z/Ctrl+Y
-- **Snap to grid** - Optional grid snapping for precise alignment
+### 🎨 Visual Editor
+- **Intuitive canvas** - Double-click to create states, click to create transitions
+- **Interactive editing** - Drag states, edit labels, customize properties via context menu
+- **Real-time validation** - Instant feedback on DFA/NFA correctness
+- **Grid with zoom & pan** - Smooth navigation with mouse wheel and drag
+- **Auto-save** - Work is automatically saved to localStorage
+- **Dark/Light themes** - Modern UI with theme switching
 
-### Simulation & Testing
-- **Step-by-step execution** - Watch automaton process input string one symbol at a time
-- **Parallel state tracking** - Visual highlighting of all active states (NFA)
-- **Execution timeline** - Replay and scrub through execution history
-- **Batch testing** - Test multiple strings at once
-- **Acceptance visualization** - Clear indication of accept/reject states
+### 🎯 Simulation & Testing
+- **Step-by-step execution** - Watch how the automaton processes input strings
+- **Visual state highlighting** - Active states pulse with breathing animation
+- **Parallel state tracking** - See all active states simultaneously in NFAs
+- **Play/Pause controls** - Auto-play with adjustable speed or manual stepping
+- **Acceptance visualization** - Clear accept/reject indication with color coding
 
-### Conversion & Optimization
-- **NFA → DFA conversion** - Automatic subset construction with step-by-step visualization
-- **DFA minimization** - Hopcroft's algorithm with state grouping animation
-- **Epsilon closure** - Support for ε-transitions in NFAs
-- **Side-by-side comparison** - Compare original and converted automata
+### 🔍 Validation
+- **DFA determinism checking** - Detects multiple transitions per symbol
+- **ε-transition warnings** - Flags epsilon transitions in DFA mode
+- **Missing states detection** - Validates initial and accept states
+- **Real-time error display** - See validation errors in simulation panel
 
-### Import & Export
-- **JSON format** - Save and load automata definitions
-- **PNG export** - Export automata as high-quality images
-- **Share via URL** - Encode automata in URL for easy sharing
-- **Example library** - Pre-built automata for learning
+### 📚 Example Library
+- **Pre-built automata** - 8+ example DFAs and NFAs
+- **Difficulty levels** - Beginner to advanced examples
+- **Category filtering** - Browse by type (DFA/NFA/PDA)
+- **One-click loading** - Load examples instantly
+
+### 💾 Import & Export
+- **JSON format** - Save and load complete automaton definitions
+- **PNG export** - Export canvas as high-quality image
+- **Auto-restore** - Automatically restore previous session on reload
+- **Clear workspace** - Quick reset to default state
+
+### ⚙️ Settings
+- **Theme selection** - Dark, Light, or System preference
+- **Animation toggle** - Enable/disable visual animations
+- **Grid display** - Show/hide background grid
+- **Persistent settings** - Settings saved between sessions
 
 ---
 
 ## 🚀 Quick Start
 
-### Online (No Installation)
+### Online (Recommended)
 Visit [automata-simulator.github.io](https://dubskysteam.github.io/automata-simulator)
 
 ### Local Development
@@ -62,74 +74,50 @@ npm run dev
 
 Open `http://localhost:5173` in your browser.
 
+### Build for Production
+
+```bash
+# Create production build
+npm run build
+
+# Preview production build
+npm run preview
+```
+
 ---
 
 ## 🎨 Usage
 
-### Creating a DFA
+### Creating an Automaton
 
-1. **Add states**: Double-click on the canvas
-2. **Set initial state**: Right-click state → "Set as Initial"
-3. **Set accept states**: Right-click state → "Toggle Accept State"
-4. **Add transitions**: Shift+drag from source state to destination state
-5. **Label transitions**: Click transition and type symbol(s)
+1. **Choose type**: Select DFA or NFA from the toolbar
+2. **Add states**: Double-click on the canvas to create states
+3. **Set initial state**: Right-click state → "Set as Initial State"
+4. **Set accept states**: Right-click state → "Set as Accept State"
+5. **Add transitions**: 
+   - Click "Add Transition" tool in toolbar
+   - Click source state, then destination state
+   - Enter transition symbols in the modal
 
 ### Testing Strings
 
-1. Click "Test Input" button
-2. Enter string to test (e.g., `010110`)
-3. Click "Run" to see if string is accepted
-4. Use "Step" button for step-by-step execution
-5. Watch states highlight as automaton processes input
+1. Open the simulation panel (right side)
+2. Enter an input string (e.g., `0110`)
+3. Click the **▶** button to start simulation
+4. Use controls to step through:
+   - **⏮** Step backward
+   - **▶️** Auto-play
+   - **⏸** Pause
+   - **⏭** Step forward
+5. Watch states highlight as input is processed
+6. See final result: **✓ Accepted** or **✗ Rejected**
 
-### Converting NFA to DFA
+### Loading Examples
 
-1. Create an NFA (including ε-transitions if desired)
-2. Click "Convert to DFA" button
-3. View subset construction table
-4. See resulting DFA side-by-side with original NFA
-5. Optionally minimize the resulting DFA
-
----
-
-## 🎯 Examples
-
-### Binary Strings Divisible by 3
-DFA that accepts binary strings whose value is divisible by 3
-
-```json
-{
-  "type": "DFA",
-  "states": ["q0", "q1", "q2"],
-  "alphabet": ["0", "1"],
-  "transitions": {
-    "q0": { "0": "q0", "1": "q1" },
-    "q1": { "0": "q2", "1": "q0" },
-    "q2": { "0": "q1", "1": "q2" }
-  },
-  "initialState": "q0",
-  "acceptStates": ["q0"]
-}
-```
-
-### Even Number of Zeros
-NFA that accepts strings with an even number of 0s
-
-```json
-{
-  "type": "NFA",
-  "states": ["even", "odd"],
-  "alphabet": ["0", "1"],
-  "transitions": {
-    "even": { "0": ["odd"], "1": ["even"] },
-    "odd": { "0": ["even"], "1": ["odd"] }
-  },
-  "initialState": "even",
-  "acceptStates": ["even"]
-}
-```
-
-More examples available in the [examples documentation](./docs/examples.md).
+1. Click **Examples** button in toolbar
+2. Filter by category (DFA/NFA) or difficulty
+3. Click **Load Example** on any automaton
+4. The example loads and you can modify it freely
 
 ---
 
@@ -138,27 +126,11 @@ More examples available in the [examples documentation](./docs/examples.md).
 | Shortcut | Action |
 |----------|--------|
 | **Double-click** | Create new state |
-| **Shift+drag** | Create transition |
-| **Click + drag** | Move state |
-| **Delete** / **Backspace** | Delete selected |
-| **Ctrl+Z** / **Cmd+Z** | Undo |
-| **Ctrl+Y** / **Cmd+Y** | Redo |
-| **Ctrl+A** / **Cmd+A** | Select all |
-| **F2** | Rename selected state |
-| **Space** | Toggle simulation play/pause |
-| **→** | Step forward |
-| **←** | Step backward |
-
----
-
-## 🛠️ Tech Stack
-
-- **React 18** - UI framework
-- **TypeScript 5.6** - Type-safe development
-- **Vite** - Build tool with HMR
-- **Canvas API** - Graph rendering and animations
-- **Zustand** - State management
-- **TailwindCSS** - Styling
+| **Delete** / **Backspace** | Delete selected state(s) |
+| **Ctrl+A** / **Cmd+A** | Select all states |
+| **Mouse wheel** | Zoom in/out |
+| **Right-click** | Open context menu |
+| **Escape** | Close modals/deselect |
 
 ---
 
@@ -166,69 +138,77 @@ More examples available in the [examples documentation](./docs/examples.md).
 
 ```
 src/
-├── components/         # React components
-│   ├── editor/         # Visual editor (canvas, nodes, transitions)
-│   ├── simulator/      # Simulation controls
-│   └── converter/      # NFA→DFA conversion UI
+├── components/          # React components
+│   ├── common/          # Reusable UI (Modal, ContextMenu, Settings)
+│   ├── editor/          # Canvas, Toolbar, Modals
+│   └── simulation/      # SimulationPanel
 ├── lib/
-│   ├── automata/       # Core automata logic (DFA, NFA, conversion)
-│   ├── graph/          # Graph algorithms (layout, rendering)
-│   └── storage/        # Save/load functionality
-├── hooks/              # Custom React hooks
-└── types/              # TypeScript type definitions
+│   ├── automata/        # Example automata definitions
+│   ├── canvas/          # Rendering engine, constants, utilities
+│   ├── simulation/      # Simulation engine & validation
+│   └── storage/         # localStorage utilities & settings
+├── hooks/               # Custom React hooks
+│   ├── useAutomaton.ts
+│   ├── useCanvas.ts
+│   └── useKeyboardShortcuts.ts
+├── types/               # TypeScript type definitions
+│   ├── index.ts         # Core types (Automaton, State, Transition)
+│   └── simulation.ts    # Simulation types
+└── styles/              # Global styles and themes
 ```
 
 ---
 
-## 🧪 Testing
+## 🎯 Examples
 
-```bash
-# Run all tests
-npm run test
+The application includes 8 built-in examples:
 
-# Run tests in watch mode
-npm run test:watch
+### DFA Examples
+- **Even number of 0s** (Beginner) - Basic two-state DFA
+- **Contains substring "01"** (Beginner) - Pattern matching
+- **Binary divisible by 3** (Intermediate) - Arithmetic DFA
 
-# Type checking
-npm run typecheck
+### NFA Examples
+- **Ends with "01"** (Beginner) - Simple NFA
+- **Third symbol from end is 1** (Intermediate) - Look-behind
+- **NFA with ε-transitions** (Intermediate) - Demonstrates epsilon closure
 
-# Linting
-npm run lint
-```
+### Advanced
+- **Starts and ends with same symbol** (Advanced) - Complex 5-state DFA
 
----
-
-## 📖 Documentation
-
-- [**Theory Guide**](./docs/theory.md) - DFA/NFA fundamentals
-- [**User Guide**](./docs/guide.md) - How to use the visualizer
-- [**Examples**](./docs/examples.md) - Pre-built automata
+All examples can be loaded via the **Examples** panel in the toolbar.
 
 ---
 
 ## 🗺️ Roadmap
 
-### Phase 1 (Current)
-- [ ] Visual editor with drag-and-drop
-- [ ] DFA simulation
-- [ ] NFA simulation with ε-transitions
-- [ ] NFA → DFA conversion visualization
-- [ ] DFA minimization
+### ✅ Completed
+- [x] Visual drag-and-drop editor
+- [x] DFA simulation with step-by-step execution
+- [x] NFA simulation with ε-transitions
+- [x] Real-time validation
+- [x] Auto-save to localStorage
+- [x] JSON import/export
+- [x] PNG export
+- [x] Example library with 8+ automata
+- [x] Dark/Light theme support
+- [x] Settings panel
 
-### Phase 2 (Next)
+### 🚧 In Progress
+- [ ] Undo/Redo system
+- [ ] Enhanced validation with visual indicators
+- [ ] Quick-fix suggestions
+
+### 📋 Planned
+- [ ] NFA → DFA conversion (subset construction)
+- [ ] DFA minimization (Hopcroft's algorithm)
 - [ ] Regex to NFA conversion (Thompson's construction)
-- [ ] More layout algorithms (circular, hierarchical)
-- [ ] Animated tutorials
-- [ ] Mobile-responsive design
-
-### Phase 3 (Future)
+- [ ] LaTeX/TikZ export
+- [ ] PDA (Pushdown Automata) support
+- [ ] Turing Machine support
+- [ ] Mobile/touch support
 - [ ] Collaborative editing
-- [ ] Export to LaTeX/TikZ
-- [ ] Animation export (GIF/MP4)
-- [ ] Educational quiz mode
-
----
 
 ## 📄 License
 
-AGPLv3 License - see [LICENSE](LICENSE) file.
+AGPL-3.0 License - see [LICENSE](LICENSE) file for details

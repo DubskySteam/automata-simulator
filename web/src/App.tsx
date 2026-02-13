@@ -14,7 +14,7 @@ const GITHUB_URL = 'https://github.com/dubskysteam/automata-simulator';
 
 function App() {
   const [toolMode, setToolMode] = useState<'select' | 'addState' | 'addTransition'>('select');
-  const [automatonType, setAutomatonType] = useState<AutomatonType>('NFA');
+  const [automatonType, setAutomatonType] = useState<AutomatonType>('DFA');
   const [showSimulation, setShowSimulation] = useState(true);
   const [simulation, setSimulation] = useState<SimulationState | null>(null);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);

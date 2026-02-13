@@ -1,69 +1,68 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Automaton, State, Transition, Position } from '@/types';
-import { generateId } from '@/lib/canvas/utils';
+import { autosave } from '@/lib/storage';
 
-export function useAutomaton(initialAutomaton?: Partial<Automaton>) {
+interface UseAutomatonProps {
+  type?: 'DFA' | 'NFA' | 'PDA';
+  states?: State[];
+  transitions?: Transition[];
+}
+
+export function useAutomaton(initialConfig?: UseAutomatonProps) {
   const [automaton, setAutomaton] = useState<Automaton>({
-    type: 'NFA',
-    states: [],
-    transitions: [],
+    type: initialConfig?.type || 'NFA',
+    states: initialConfig?.states || [],
+    transitions: initialConfig?.transitions || [],
     alphabet: [],
-    ...initialAutomaton,
   });
 
-  // Update automaton type when it changes externally
+  const hasRestoredRef = useRef(false);
+
+  // Autosave whenever automaton changes (but not on initial mount)
   useEffect(() => {
-    if (initialAutomaton?.type && initialAutomaton.type !== automaton.type) {
-      setAutomaton((prev) => ({ ...prev, type: initialAutomaton.type! }));
+    if (hasRestoredRef.current && (automaton.states.length > 0 || automaton.transitions.length > 0)) {
+      autosave(automaton);
     }
-  }, [initialAutomaton?.type]);
+  }, [automaton]);
 
-  const setAutomatonType = useCallback((type: 'DFA' | 'NFA') => {
-    setAutomaton((prev) => ({ ...prev, type }));
-  }, []);
-
-  const addState = useCallback((position: Position, label?: string) => {
-    setAutomaton((prev) => {
-      const newState: State = {
-        id: generateId(),
-        label: label || `q${prev.states.length}`,
-        isInitial: prev.states.length === 0,
-        isAccept: false,
-        position,
-      };
-
-      return {
-        ...prev,
-        states: [...prev.states, newState],
-      };
-    });
-  }, []);
+  const addState = useCallback((position: Position) => {
+    hasRestoredRef.current = true;
+    const newId = (automaton.states.length + 1).toString();
+    const newLabel = `q${automaton.states.length}`;
+    const newState: State = {
+      id: newId,
+      label: newLabel,
+      isInitial: automaton.states.length === 0,
+      isAccept: false,
+      position,
+    };
+    setAutomaton((prev) => ({
+      ...prev,
+      states: [...prev.states, newState],
+    }));
+  }, [automaton.states.length]);
 
   const removeState = useCallback((stateId: string) => {
     setAutomaton((prev) => ({
       ...prev,
       states: prev.states.filter((s) => s.id !== stateId),
-      transitions: prev.transitions.filter(
-        (t) => t.from !== stateId && t.to !== stateId
-      ),
+      transitions: prev.transitions.filter((t) => t.from !== stateId && t.to !== stateId),
     }));
   }, []);
 
   const updateState = useCallback((stateId: string, updates: Partial<State>) => {
     setAutomaton((prev) => ({
       ...prev,
-      states: prev.states.map((state) =>
-        state.id === stateId ? { ...state, ...updates } : state
-      ),
+      states: prev.states.map((s) => (s.id === stateId ? { ...s, ...updates } : s)),
     }));
   }, []);
 
   const toggleStateInitial = useCallback((stateId: string) => {
     setAutomaton((prev) => ({
       ...prev,
-      states: prev.states.map((state) => ({
-        ...state,
-        isInitial: state.id === stateId ? !state.isInitial : state.isInitial,
+      states: prev.states.map((s) => ({
+        ...s,
+        isInitial: s.id === stateId ? !s.isInitial : false,
       })),
     }));
   }, []);
@@ -71,46 +70,25 @@ export function useAutomaton(initialAutomaton?: Partial<Automaton>) {
   const toggleStateAccept = useCallback((stateId: string) => {
     setAutomaton((prev) => ({
       ...prev,
-      states: prev.states.map((state) =>
-        state.id === stateId ? { ...state, isAccept: !state.isAccept } : state
+      states: prev.states.map((s) =>
+        s.id === stateId ? { ...s, isAccept: !s.isAccept } : s
       ),
     }));
   }, []);
 
   const addTransition = useCallback((from: string, to: string, symbols: string[]) => {
-    setAutomaton((prev) => {
-      // Check if transition already exists
-      const existingTransition = prev.transitions.find(
-        (t) => t.from === from && t.to === to
-      );
-
-      if (existingTransition) {
-        // Merge symbols
-        return {
-          ...prev,
-          transitions: prev.transitions.map((t) =>
-            t.id === existingTransition.id
-              ? { ...t, symbols: Array.from(new Set([...t.symbols, ...symbols])) }
-              : t
-          ),
-          alphabet: Array.from(new Set([...prev.alphabet, ...symbols.filter(s => s !== 'ε')])),
-        };
-      }
-
-      const newTransition: Transition = {
-        id: generateId(),
-        from,
-        to,
-        symbols,
-      };
-
-      return {
-        ...prev,
-        transitions: [...prev.transitions, newTransition],
-        alphabet: Array.from(new Set([...prev.alphabet, ...symbols.filter(s => s !== 'ε')])),
-      };
-    });
-  }, []);
+    const newId = `t${automaton.transitions.length + 1}`;
+    const newTransition: Transition = {
+      id: newId,
+      from,
+      to,
+      symbols,
+    };
+    setAutomaton((prev) => ({
+      ...prev,
+      transitions: [...prev.transitions, newTransition],
+    }));
+  }, [automaton.transitions.length]);
 
   const updateTransition = useCallback((transitionId: string, updates: Partial<Transition>) => {
     setAutomaton((prev) => ({
@@ -129,19 +107,30 @@ export function useAutomaton(initialAutomaton?: Partial<Automaton>) {
   }, []);
 
   const loadAutomaton = useCallback((newAutomaton: Automaton) => {
+    hasRestoredRef.current = true;
     setAutomaton(newAutomaton);
   }, []);
 
-return {
-  automaton,
-  addState,
-  removeState,
-  updateState,
-  toggleStateInitial,
-  toggleStateAccept,
-  addTransition,
-  updateTransition,
-  removeTransition,
-  loadAutomaton,
-};
+  const clearAutomaton = useCallback(() => {
+    setAutomaton({
+      type: automaton.type,
+      states: [],
+      transitions: [],
+      alphabet: [],
+    });
+  }, [automaton.type]);
+
+  return {
+    automaton,
+    addState,
+    removeState,
+    updateState,
+    toggleStateInitial,
+    toggleStateAccept,
+    addTransition,
+    updateTransition,
+    removeTransition,
+    loadAutomaton,
+    clearAutomaton,
+  };
 }
