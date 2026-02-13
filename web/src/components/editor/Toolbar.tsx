@@ -1,6 +1,9 @@
 import { ToolMode, AutomatonType } from '@/types';
 import './Toolbar.css';
 import { storage } from '@/lib/storage';
+import { useState } from 'react';
+import { ExamplesPanel } from '@/components/common/ExamplesPanel';
+import { AutomatonExample } from '@/lib/automata/examples';
 
 interface ToolbarProps {
   toolMode: ToolMode;
@@ -21,6 +24,8 @@ export function Toolbar({
   onExportJSON,
   onImportJSON,
 }: ToolbarProps) {
+  const [showExamples, setShowExamples] = useState(false);
+
   return (
     <div className="toolbar">
       <div className="toolbar-section">
@@ -209,6 +214,44 @@ export function Toolbar({
           </button>
         </div>
       </div>
+      <div className="toolbar-section">
+        <span className="toolbar-title">Examples</span>
+        <div className="toolbar-buttons">
+          <button
+            className="toolbar-button"
+            onClick={() => setShowExamples(true)}
+            title="Load Example Automaton"
+          >
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+              <line x1="16" y1="13" x2="8" y2="13" />
+              <line x1="16" y1="17" x2="8" y2="17" />
+              <polyline points="10 9 9 9 8 9" />
+            </svg>
+            <span>Examples</span>
+          </button>
+        </div>
+      </div>
+
+      <ExamplesPanel
+        isOpen={showExamples}
+        onClose={() => setShowExamples(false)}
+        onLoadExample={(example: AutomatonExample) => {
+          const helpers = (window as any).canvasHelpers;
+          if (helpers?.loadAutomaton) {
+            helpers.loadAutomaton(example.automaton);
+          }
+          onAutomatonTypeChange(example.automaton.type);
+        }}
+      />
     </div>
   );
 }
