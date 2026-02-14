@@ -8,7 +8,7 @@ import { ContextMenu, ContextMenuItem } from '@/components/common/ContextMenu';
 import { StateEditModal } from './StateEditModal';
 import { TransitionModal } from './TransitionModal';
 import { SimulationEngine } from '@/lib/simulation/engine';
-import { Position, ToolMode, State, Transition, AutomatonType } from '@/types';
+import { Position, ToolMode, State, Transition, AutomatonType, Automaton } from '@/types';
 import { SimulationState } from '@/types/simulation';
 import { CANVAS_CONSTANTS, getCanvasColors } from '@/lib/canvas/constants';
 import { getCanvasCoordinates, isPointOnTransition } from '@/lib/canvas/utils';
@@ -34,7 +34,6 @@ export function Canvas({
   toolMode,
   showSimulation = false,
   automatonType = 'NFA',
-  onAutomatonTypeChange,
   onSimulationChange,
   onValidationChange,
   animationsEnabled = true,
@@ -71,11 +70,6 @@ export function Canvas({
   const playIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const [animationTime, setAnimationTime] = useState(0);
   const animationFrameRef = useRef<number | null>(null);
-  const [view, setView] = useState<{ x: number; y: number; scale: number }>({
-    x: 0,
-    y: 0,
-    scale: 1,
-  });
 
   // Use automaton hook
   const DEFAULT_AUTOMATON = {
@@ -235,7 +229,8 @@ export function Canvas({
       },
       clearWorkspace: () => {
         loadAutomaton(DEFAULT_AUTOMATON);
-        setView({ x: 0, y: 0, scale: 1 });
+        setOffset({ x: 0, y: 0 });
+        setZoom(1);
       },
     };
   }, [
@@ -246,7 +241,6 @@ export function Canvas({
     canvasRef,
     loadAutomaton,
     clearAutomaton,
-    setView,
   ]);
 
   // Animation loop for breathing effect
@@ -280,7 +274,7 @@ export function Canvas({
         const fromState = states.find((s) => s.id === transition.from);
         const toState = states.find((s) => s.id === transition.to);
 
-        if (fromState && toState && isPointOnTransition(pos, transition, fromState, toState, 10)) {
+        if (fromState && toState && isPointOnTransition(pos, fromState, toState, 10)) {
           return transition;
         }
       }
@@ -336,7 +330,7 @@ export function Canvas({
   );
 
   const handleCanvasClick = useCallback(
-    (position: Position, event: React.MouseEvent) => {
+    (position: Position) => {
       if (toolMode === 'addState') {
         addState(position);
         return;
@@ -544,7 +538,7 @@ export function Canvas({
     if (!contextMenu?.target) return [];
 
     if (contextMenu.target.type === 'state') {
-      const state = states.find((s) => s.id === contextMenu.target.id);
+      const state = states.find((s) => s.id === (contextMenu.target as { type: 'state'; id: string }).id);
       if (!state) return [];
 
       return [
@@ -579,8 +573,8 @@ export function Canvas({
       ];
     }
 
-    if (contextMenu.target.type === 'transition') {
-      const transition = transitions.find((t) => t.id === contextMenu.target.id);
+    if (contextMenu.target && contextMenu.target.type === 'transition') {
+      const transition = transitions.find((t) => t.id === contextMenu.target!.id);
       if (!transition) return [];
 
       return [
