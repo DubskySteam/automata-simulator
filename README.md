@@ -8,6 +8,8 @@ An interactive web application for creating, editing, and simulating Determinist
 
 [**Live Demo**](https://dubskysteam.github.io/automata-simulator) | [**Report Bug**](https://github.com/dubskysteam/automata-simulator/issues) | [**Request Feature**](https://github.com/dubskysteam/automata-simulator/issues)
 
+<img src="docs/gifs/showcase.gif" alt="demo" style="border-radius: 15px;">
+
 ---
 
 ## ✨ Features
