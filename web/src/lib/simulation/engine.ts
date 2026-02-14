@@ -1,4 +1,4 @@
-import { Automaton, State, Transition } from '@/types';
+import { Automaton, State } from '@/types';
 import { SimulationStep } from '@/types/simulation';
 
 export class SimulationEngine {

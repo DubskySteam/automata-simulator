@@ -1,4 +1,4 @@
-import { Position, State, Transition } from '@/types';
+import { Position, State } from '@/types';
 import { CANVAS_CONSTANTS } from './constants';
 
 export function snapToGrid(pos: Position, gridSize: number): Position {
@@ -63,7 +63,6 @@ function distanceToLineSegment(
 // Check if point is near a transition
 export function isPointOnTransition(
   point: Position,
-  transition: Transition,
   fromState: State,
   toState: State,
   threshold: number = 10
