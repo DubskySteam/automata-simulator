@@ -1,5 +1,6 @@
 import { Automaton, State } from '@/types';
 import { SimulationStep } from '@/types/simulation';
+import { ValidationError, ValidationResult } from '@/types/validation';
 
 export class SimulationEngine {
   private automaton: Automaton;
@@ -9,24 +10,37 @@ export class SimulationEngine {
   }
 
   /**
-   * Validate the automaton
+   * Validate the automaton with detailed error information
    */
-  validate(): { valid: boolean; errors: string[] } {
-    const errors: string[] = [];
+  validate(): ValidationResult {
+    const errors: ValidationError[] = [];
 
     // Check for initial state
     const initialStates = this.automaton.states.filter((s) => s.isInitial);
     if (initialStates.length === 0) {
-      errors.push('No initial state defined');
+      errors.push({
+        message: 'No initial state defined',
+        type: 'error',
+        affectedStates: [],
+      });
     }
+
     if (initialStates.length > 1) {
-      errors.push('Multiple initial states defined (only one allowed)');
+      errors.push({
+        message: 'Multiple initial states defined (only one allowed)',
+        type: 'error',
+        affectedStates: initialStates.map((s) => s.id),
+      });
     }
 
     // Check for accept states
     const acceptStates = this.automaton.states.filter((s) => s.isAccept);
     if (acceptStates.length === 0) {
-      errors.push('No accept states defined');
+      errors.push({
+        message: 'No accept states defined',
+        type: 'warning',
+        affectedStates: [],
+      });
     }
 
     // DFA-specific validation
@@ -35,15 +49,18 @@ export class SimulationEngine {
       const epsilonTransitions = this.automaton.transitions.filter((t) =>
         t.symbols.includes('ε')
       );
+      
       if (epsilonTransitions.length > 0) {
-        const statesWithEpsilon = new Set(
-          epsilonTransitions.map((t) => {
-            const state = this.automaton.states.find((s) => s.id === t.from);
-            return state?.label || t.from;
-          })
-        );
-        statesWithEpsilon.forEach((stateLabel) => {
-          errors.push(`DFA cannot have ε-transitions (found in state ${stateLabel})`);
+        const affectedStates = new Set<string>();
+        epsilonTransitions.forEach((t) => {
+          affectedStates.add(t.from);
+        });
+
+        errors.push({
+          message: `DFA cannot have ε-transitions (found ${epsilonTransitions.length})`,
+          type: 'error',
+          affectedStates: Array.from(affectedStates),
+          affectedTransitions: epsilonTransitions.map((t) => t.id),
         });
       }
 
@@ -53,19 +70,26 @@ export class SimulationEngine {
           (t) => t.from === state.id
         );
 
-        const symbolCounts = new Map<string, number>();
+        const symbolToTransitions = new Map<string, string[]>();
+
         for (const transition of outgoingTransitions) {
           for (const symbol of transition.symbols) {
-            symbolCounts.set(symbol, (symbolCounts.get(symbol) || 0) + 1);
+            if (!symbolToTransitions.has(symbol)) {
+              symbolToTransitions.set(symbol, []);
+            }
+            symbolToTransitions.get(symbol)!.push(transition.id);
           }
         }
 
         // Report duplicates
-        for (const [symbol, count] of symbolCounts.entries()) {
-          if (count > 1) {
-            errors.push(
-              `State ${state.label} has ${count} transitions for symbol "${symbol}" (DFA allows only one)`
-            );
+        for (const [symbol, transitionIds] of symbolToTransitions.entries()) {
+          if (transitionIds.length > 1) {
+            errors.push({
+              message: `State ${state.label} has ${transitionIds.length} transitions for symbol "${symbol}" (DFA allows only one)`,
+              type: 'error',
+              affectedStates: [state.id],
+              affectedTransitions: transitionIds,
+            });
           }
         }
       }
@@ -77,32 +101,41 @@ export class SimulationEngine {
       const toState = this.automaton.states.find((s) => s.id === transition.to);
 
       if (!fromState) {
-        errors.push(`Transition references invalid source state: ${transition.from}`);
+        errors.push({
+          message: `Transition references invalid source state: ${transition.from}`,
+          type: 'error',
+          affectedTransitions: [transition.id],
+        });
       }
+
       if (!toState) {
-        errors.push(`Transition references invalid target state: ${transition.to}`);
+        errors.push({
+          message: `Transition references invalid target state: ${transition.to}`,
+          type: 'error',
+          affectedTransitions: [transition.id],
+        });
       }
+
       if (transition.symbols.length === 0) {
-        errors.push(
-          `Transition from ${fromState?.label || transition.from} to ${
+        errors.push({
+          message: `Transition from ${fromState?.label || transition.from} to ${
             toState?.label || transition.to
-          } has no symbols`
-        );
+          } has no symbols`,
+          type: 'error',
+          affectedTransitions: [transition.id],
+        });
       }
     }
 
     return {
-      valid: errors.length === 0,
+      valid: errors.filter((e) => e.type === 'error').length === 0,
       errors,
     };
   }
 
-  /**
-   * Simulate the automaton with the given input string
-   */
+  // Keep all existing simulation methods unchanged
   simulate(inputString: string): SimulationStep[] {
     const initialStates = this.automaton.states.filter((s) => s.isInitial);
-
     if (initialStates.length === 0) {
       return [
         {
@@ -113,7 +146,6 @@ export class SimulationEngine {
       ];
     }
 
-    // Use different simulation logic for DFA vs NFA
     if (this.automaton.type === 'DFA') {
       return this.simulateDFA(inputString, initialStates[0]);
     } else {
@@ -121,27 +153,21 @@ export class SimulationEngine {
     }
   }
 
-  /**
-   * Simulate a DFA - deterministic, single state at a time
-   */
   private simulateDFA(inputString: string, initialState: State): SimulationStep[] {
     const steps: SimulationStep[] = [];
     let currentState = initialState.id;
     let consumed = '';
     let remaining = inputString;
 
-    // Initial step
     steps.push({
       currentStates: [currentState],
       remainingInput: remaining,
       consumedInput: consumed,
     });
 
-    // Process each symbol
     for (let i = 0; i < inputString.length; i++) {
       const symbol = inputString[i];
 
-      // Find THE transition for this symbol (DFA = deterministic = exactly one)
       const transition = this.automaton.transitions.find(
         (t) => t.from === currentState && t.symbols.includes(symbol)
       );
@@ -150,18 +176,15 @@ export class SimulationEngine {
       remaining = remaining.slice(1);
 
       if (!transition) {
-        // No transition found - DFA gets stuck and rejects
         steps.push({
-          currentStates: [], // Empty = stuck/rejected
+          currentStates: [],
           remainingInput: remaining,
           consumedInput: consumed,
         });
         break;
       }
 
-      // Take the transition
       currentState = transition.to;
-
       steps.push({
         currentStates: [currentState],
         remainingInput: remaining,
@@ -177,30 +200,22 @@ export class SimulationEngine {
     return steps;
   }
 
-  /**
-   * Simulate an NFA - nondeterministic, multiple states possible
-   */
   private simulateNFA(inputString: string, initialState: State): SimulationStep[] {
     const steps: SimulationStep[] = [];
-
-    // Get epsilon closure of initial state
     let currentStates = this.getEpsilonClosure([initialState.id]);
     let consumed = '';
     let remaining = inputString;
 
-    // Initial step
     steps.push({
       currentStates: [...currentStates],
       remainingInput: remaining,
       consumedInput: consumed,
     });
 
-    // Process each symbol
     for (let i = 0; i < inputString.length; i++) {
       const symbol = inputString[i];
       const nextStates = new Set<string>();
 
-      // For each current state, find ALL transitions with this symbol
       for (const stateId of currentStates) {
         const transitions = this.automaton.transitions.filter(
           (t) => t.from === stateId && t.symbols.includes(symbol)
@@ -211,9 +226,7 @@ export class SimulationEngine {
         }
       }
 
-      // Apply epsilon closure to next states
       currentStates = this.getEpsilonClosure(Array.from(nextStates));
-
       consumed += symbol;
       remaining = remaining.slice(1);
 
@@ -231,7 +244,6 @@ export class SimulationEngine {
             : undefined,
       });
 
-      // If no states, we're stuck (reject)
       if (currentStates.length === 0) {
         break;
       }
@@ -240,10 +252,6 @@ export class SimulationEngine {
     return steps;
   }
 
-  /**
-   * Get epsilon closure for NFA (states reachable via ε-transitions)
-   * For DFA, this should never be called
-   */
   private getEpsilonClosure(stateIds: string[]): string[] {
     const closure = new Set(stateIds);
     const stack = [...stateIds];
@@ -251,7 +259,6 @@ export class SimulationEngine {
     while (stack.length > 0) {
       const current = stack.pop()!;
 
-      // Find all ε-transitions from current state
       const epsilonTransitions = this.automaton.transitions.filter(
         (t) => t.from === current && t.symbols.includes('ε')
       );
@@ -267,18 +274,12 @@ export class SimulationEngine {
     return Array.from(closure);
   }
 
-  /**
-   * Check if the simulation accepts
-   */
   isAccepted(steps: SimulationStep[]): boolean {
     if (steps.length === 0) return false;
-
     const finalStep = steps[steps.length - 1];
 
-    // Must have consumed all input
     if (finalStep.remainingInput.length > 0) return false;
 
-    // Must be in at least one accept state (for NFA) or the accept state (for DFA)
     return finalStep.currentStates.some((stateId) => {
       const state = this.automaton.states.find((s) => s.id === stateId);
       return state?.isAccept || false;

@@ -10,6 +10,7 @@ import { TransitionModal } from './TransitionModal';
 import { SimulationEngine } from '@/lib/simulation/engine';
 import { Position, ToolMode, State, Transition, AutomatonType, Automaton } from '@/types';
 import { SimulationState } from '@/types/simulation';
+import { ValidationError } from '@/types/validation';
 import { CANVAS_CONSTANTS, getCanvasColors } from '@/lib/canvas/constants';
 import { getCanvasCoordinates, isPointOnTransition } from '@/lib/canvas/utils';
 import { storage } from '@/lib/storage';
@@ -43,11 +44,12 @@ export function Canvas({
     width: propWidth || 800,
     height: propHeight || 600,
   });
+
   const rendererRef = useRef<CanvasRenderer | null>(null);
   const [offset, setOffset] = useState<Position>({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [selectedStates, setSelectedStates] = useState<string[]>([]);
-  const lastClickTimeRef = useRef<number>(0);
+  const lastClickTimeRef = useRef(0);
   const lastClickPosRef = useRef<Position>({ x: 0, y: 0 });
   const [transitionDraft, setTransitionDraft] = useState<{
     fromState: string;
@@ -65,11 +67,23 @@ export function Canvas({
     toState: string;
     editingTransitionId?: string;
   } | null>(null);
+
   const [simulation, setSimulation] = useState<SimulationState | null>(null);
   const simulationEngineRef = useRef<SimulationEngine | null>(null);
   const playIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const [animationTime, setAnimationTime] = useState(0);
   const animationFrameRef = useRef<number | null>(null);
+
+  // NEW: Validation error tracking
+  const validationErrorsRef = useRef<{
+    states: Set<string>;
+    transitions: Set<string>;
+    errors: ValidationError[];
+  }>({
+    states: new Set(),
+    transitions: new Set(),
+    errors: [],
+  });
 
   // Use automaton hook
   const DEFAULT_AUTOMATON = {
@@ -135,12 +149,29 @@ export function Canvas({
   // Get active states for visual feedback (declared early to avoid reference errors)
   const activeStates = simulation?.steps[simulation.currentStep]?.currentStates || [];
 
-  // Update simulation engine when automaton changes
+  // UPDATED: Update simulation engine and validation tracking when automaton changes
   useEffect(() => {
     simulationEngineRef.current = new SimulationEngine(automaton);
-    const validation = simulationEngineRef.current.validate();
+    const result = simulationEngineRef.current.validate();
+
+    // Build error tracking sets
+    const errorStates = new Set<string>();
+    const errorTransitions = new Set<string>();
+
+    result.errors.forEach((error) => {
+      error.affectedStates?.forEach((id) => errorStates.add(id));
+      error.affectedTransitions?.forEach((id) => errorTransitions.add(id));
+    });
+
+    validationErrorsRef.current = {
+      states: errorStates,
+      transitions: errorTransitions,
+      errors: result.errors,
+    };
+
+    // Notify parent (keep backward compatibility)
     if (onValidationChange) {
-      onValidationChange(validation.errors);
+      onValidationChange(result.errors.map((e) => e.message));
     }
   }, [automaton, onValidationChange]);
 
@@ -176,7 +207,6 @@ export function Canvas({
     });
 
     resizeObserver.observe(container);
-
     return () => {
       resizeObserver.disconnect();
     };
@@ -184,7 +214,6 @@ export function Canvas({
 
   const width = containerSize.width;
   const height = containerSize.height;
-
   const canvasRef = useCanvas({ width, height });
 
   // Expose canvas helpers to parent (for epsilon transition cleanup)
@@ -248,7 +277,6 @@ export function Canvas({
     if (!animationsEnabled) return;
 
     let startTime = Date.now();
-
     const animate = () => {
       const elapsed = (Date.now() - startTime) / 1000;
       setAnimationTime(elapsed);
@@ -423,7 +451,7 @@ export function Canvas({
 
         return { ...prev, currentStep: prev.currentStep + 1 };
       });
-    }, 1000); // 1 second delay as requested
+    }, 1000);
   }, []);
 
   const handleSimulationPause = useCallback(() => {
@@ -468,7 +496,7 @@ export function Canvas({
   });
 
   const handleWheel = useCallback(
-    (event: React.WheelEvent<HTMLCanvasElement>) => {
+    (event: React.WheelEvent) => {
       const result = handlers.onWheel(event);
       if (result) {
         setZoom((prev) => {
@@ -481,7 +509,7 @@ export function Canvas({
   );
 
   const handleMouseMove = useCallback(
-    (event: React.MouseEvent<HTMLCanvasElement>) => {
+    (event: React.MouseEvent) => {
       const canvas = event.currentTarget;
       const pos = getCanvasCoordinates(event, canvas, offset, zoom);
       setMousePos(pos);
@@ -498,7 +526,7 @@ export function Canvas({
   );
 
   const handleContextMenu = useCallback(
-    (event: React.MouseEvent<HTMLCanvasElement>) => {
+    (event: React.MouseEvent) => {
       event.preventDefault();
 
       const canvas = event.currentTarget;
@@ -629,7 +657,7 @@ export function Canvas({
     rendererRef.current = new CanvasRenderer(canvas);
   }, [canvasRef]);
 
-  // Render loop
+  // UPDATED: Render loop with error highlighting
   useEffect(() => {
     const canvas = canvasRef.current;
     const renderer = rendererRef.current;
@@ -647,6 +675,7 @@ export function Canvas({
       }
     });
 
+    // Draw transitions with error highlighting
     transitions.forEach((transition) => {
       const fromState = states.find((s) => s.id === transition.from);
       const toState = states.find((s) => s.id === transition.to);
@@ -656,10 +685,12 @@ export function Canvas({
 
         renderer.drawTransition(transition, fromState, toState, offset, zoom, {
           hasReverse,
+          hasError: validationErrorsRef.current.transitions.has(transition.id),
         });
       }
     });
 
+    // Draw transition draft
     if ((transitionDraft || isCreatingTransition) && transitionDraft) {
       const fromState = states.find((s) => s.id === transitionDraft.fromState);
       if (fromState) {
@@ -683,13 +714,16 @@ export function Canvas({
       }
     }
 
+    // Draw states with error highlighting
     states.forEach((state) => {
       const isHighlighted = transitionDraft?.fromState === state.id;
       const isActive = activeStates.includes(state.id);
+
       renderer.drawState(state, offset, zoom, {
         isHovered: hoveredState === state.id || isHighlighted,
         isSelected: selectedStates.includes(state.id),
         isActive,
+        hasError: validationErrorsRef.current.states.has(state.id),
         animationTime: isActive ? animationTime : undefined,
       });
     });
@@ -717,18 +751,6 @@ export function Canvas({
 
   return (
     <>
-      <div ref={containerRef} className="canvas-container">
-        <canvas
-          ref={canvasRef}
-          className={`canvas ${getCursorClass()}`}
-          onMouseDown={handlers.onMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handlers.onMouseUp}
-          onMouseLeave={handlers.onMouseLeave}
-          onWheel={handleWheel}
-          onContextMenu={handleContextMenu}
-        />
-      </div>
       {contextMenu && (
         <ContextMenu
           x={contextMenu.x}
@@ -737,14 +759,15 @@ export function Canvas({
           onClose={() => setContextMenu(null)}
         />
       )}
+
       <StateEditModal
         state={stateEditModal}
-        isOpen={!!stateEditModal}
         onClose={() => setStateEditModal(null)}
         onSave={updateState}
       />
+
       <TransitionModal
-        isOpen={!!transitionModal}
+        isOpen={transitionModal !== null}
         onClose={() => setTransitionModal(null)}
         onSave={(symbols) => {
           if (transitionModal) {
@@ -769,6 +792,19 @@ export function Canvas({
           transitionModal ? states.find((s) => s.id === transitionModal.toState)?.label : undefined
         }
       />
+
+      <div ref={containerRef} className={`canvas-container ${getCursorClass()}`}>
+        <canvas
+          ref={canvasRef}
+          width={width}
+          height={height}
+          onMouseDown={handlers.onMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handlers.onMouseUp}
+          onWheel={handleWheel}
+          onContextMenu={handleContextMenu}
+        />
+      </div>
     </>
   );
 }

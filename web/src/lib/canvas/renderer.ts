@@ -46,6 +46,7 @@ export class CanvasRenderer {
       isHovered?: boolean;
       isSelected?: boolean;
       isActive?: boolean;
+      hasError?: boolean; // NEW
       animationTime?: number;
     } = {}
   ): void {
@@ -57,14 +58,20 @@ export class CanvasRenderer {
     let fillColor = CANVAS_COLORS.state.default;
     let borderColor = CANVAS_COLORS.state.border;
 
-    if (options.isActive) {
+    // Priority: Error > Active > Selected > Hover > Accept > Initial > Default
+    if (options.hasError) {
+      borderColor = '#ef5350'; // Material Red
+      this.ctx.lineWidth = CANVAS_CONSTANTS.STATE_BORDER_WIDTH * zoom * 1.8;
+
+      // Add error glow
+      this.ctx.shadowColor = 'rgba(239, 83, 80, 0.5)';
+      this.ctx.shadowBlur = 12 * zoom;
+    } else if (options.isActive) {
       fillColor = CANVAS_COLORS.state.active;
       borderColor = CANVAS_COLORS.state.borderActive;
-
       if (options.animationTime !== undefined) {
         const pulse = Math.sin(options.animationTime * 2.5) * 0.15 + 1;
         const animatedRadius = radius * pulse;
-
         const gradient = this.ctx.createRadialGradient(
           x,
           y,
@@ -76,7 +83,6 @@ export class CanvasRenderer {
         gradient.addColorStop(0, 'rgba(239, 83, 80, 0.6)');
         gradient.addColorStop(0.5, 'rgba(239, 83, 80, 0.3)');
         gradient.addColorStop(1, 'rgba(239, 83, 80, 0)');
-
         this.ctx.beginPath();
         this.ctx.arc(x, y, animatedRadius * 1.5, 0, Math.PI * 2);
         this.ctx.fillStyle = gradient;
@@ -92,27 +98,33 @@ export class CanvasRenderer {
       fillColor = CANVAS_COLORS.state.initial;
     }
 
-    if (!options.isActive) {
+    if (!options.isActive && !options.hasError) {
       this.ctx.shadowColor = 'rgba(0, 0, 0, 0.15)';
       this.ctx.shadowBlur = 8 * zoom;
       this.ctx.shadowOffsetX = 2 * zoom;
       this.ctx.shadowOffsetY = 2 * zoom;
     }
 
+    // Draw main circle
     this.ctx.beginPath();
     this.ctx.arc(x, y, radius, 0, Math.PI * 2);
     this.ctx.fillStyle = fillColor;
     this.ctx.fill();
 
+    // Reset shadow
     this.ctx.shadowColor = 'transparent';
     this.ctx.shadowBlur = 0;
     this.ctx.shadowOffsetX = 0;
     this.ctx.shadowOffsetY = 0;
 
+    // Draw border
     this.ctx.strokeStyle = borderColor;
-    this.ctx.lineWidth = CANVAS_CONSTANTS.STATE_BORDER_WIDTH * zoom;
+    if (!options.hasError) {
+      this.ctx.lineWidth = CANVAS_CONSTANTS.STATE_BORDER_WIDTH * zoom;
+    }
     this.ctx.stroke();
 
+    // Accept state double circle
     if (state.isAccept) {
       this.ctx.beginPath();
       this.ctx.arc(x, y, radius - 6 * zoom, 0, Math.PI * 2);
@@ -121,10 +133,10 @@ export class CanvasRenderer {
       this.ctx.stroke();
     }
 
+    // Initial state arrow
     if (state.isInitial) {
       const arrowStart = x - radius - 25 * zoom;
       const arrowEnd = x - radius - 2 * zoom;
-
       this.ctx.beginPath();
       this.ctx.moveTo(arrowStart, y);
       this.ctx.lineTo(arrowEnd, y);
@@ -142,6 +154,7 @@ export class CanvasRenderer {
       this.ctx.fill();
     }
 
+    // Draw label
     this.ctx.fillStyle = options.isActive ? '#ffffff' : CANVAS_COLORS.text.state;
     this.ctx.font = `bold ${16 * zoom}px sans-serif`;
     this.ctx.textAlign = 'center';
@@ -159,6 +172,7 @@ export class CanvasRenderer {
       isHovered?: boolean;
       isSelected?: boolean;
       hasReverse?: boolean;
+      hasError?: boolean; // NEW
     } = {}
   ): void {
     const CANVAS_COLORS = getCanvasColors();
@@ -167,14 +181,17 @@ export class CanvasRenderer {
     const toX = toState.position.x * zoom + offset.x;
     const toY = toState.position.y * zoom + offset.y;
 
-    const strokeColor = options.isSelected
-      ? CANVAS_COLORS.transition.selected
-      : options.isHovered
-      ? CANVAS_COLORS.transition.hover
-      : CANVAS_COLORS.transition.default;
+    // Priority: Error > Selected > Hover > Default
+    const strokeColor = options.hasError
+      ? '#ef5350' // Material Red
+      : options.isSelected
+        ? CANVAS_COLORS.transition.selected
+        : options.isHovered
+          ? CANVAS_COLORS.transition.hover
+          : CANVAS_COLORS.transition.default;
 
     this.ctx.strokeStyle = strokeColor;
-    this.ctx.lineWidth = 2.5 * zoom;
+    this.ctx.lineWidth = options.hasError ? 3.5 * zoom : 2.5 * zoom;
 
     if (fromState.id === toState.id) {
       this.drawSelfLoop(fromX, fromY, zoom, transition.symbols.join(', '), strokeColor);
@@ -183,6 +200,7 @@ export class CanvasRenderer {
 
     const angle = Math.atan2(toY - fromY, toX - fromX);
     const radius = CANVAS_CONSTANTS.STATE_RADIUS * zoom;
+
     const startX = fromX + Math.cos(angle) * radius;
     const startY = fromY + Math.sin(angle) * radius;
     const endX = toX - Math.cos(angle) * (radius + 2 * zoom);
