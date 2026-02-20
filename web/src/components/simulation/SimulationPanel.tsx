@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { SimulationState } from '@/types/simulation';
 import './SimulationPanel.css';
+import { ValidationPanel } from '../validation/ValidationPanel';
+import { ValidationError } from '@/types/validation';
 
 interface SimulationPanelProps {
   simulation: SimulationState | null;
@@ -9,7 +11,7 @@ interface SimulationPanelProps {
   onReset: () => void;
   onPlay: () => void;
   onPause: () => void;
-  validationErrors: string[];
+  validationErrors: ValidationError[];
 }
 
 export function SimulationPanel({
@@ -55,16 +57,7 @@ export function SimulationPanel({
         <h2>Simulation</h2>
       </div>
 
-      {validationErrors.length > 0 && (
-        <div className="simulation-errors">
-          <h3>⚠️ Validation Errors</h3>
-          <ul>
-            {validationErrors.map((error, index) => (
-              <li key={index}>{error}</li>
-            ))}
-          </ul>
-        </div>
-      )}
+      <ValidationPanel errors={validationErrors} />
 
       <div className="simulation-input-section">
         <label>Input String:</label>

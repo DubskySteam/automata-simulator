@@ -13,6 +13,10 @@ interface ToolbarProps {
   onExportPNG?: () => void;
   onExportJSON?: () => void;
   onImportJSON?: () => void;
+  onRedo?: () => void;
+  onUndo?: () => void;
+  canUndo?: boolean;
+  canRedo?: boolean;
 }
 
 export function Toolbar({ 
@@ -23,6 +27,10 @@ export function Toolbar({
   onExportPNG,
   onExportJSON,
   onImportJSON,
+  onUndo,
+  onRedo,
+  canUndo = false,
+  canRedo = false,
 }: ToolbarProps) {
   const [showExamples, setShowExamples] = useState(false);
 
@@ -116,6 +124,18 @@ export function Toolbar({
               </defs>
             </svg>
             <span>Transition</span>
+          </button>
+        </div>
+      </div>
+
+      <div className="toolbar-section">
+        <div className="toolbar-buttons">
+          <button className="toolbar-button" onClick={onUndo} disabled={!canUndo} title="Undo changes">
+            <span>Undo</span>
+          </button>
+
+          <button className="toolbar-button" onClick={onRedo} disabled={!canRedo} title="Redo changes">
+            <span>Redo</span>
           </button>
         </div>
       </div>

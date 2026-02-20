@@ -4,7 +4,7 @@ import { Toolbar } from './components/editor/Toolbar';
 import { SimulationPanel } from './components/simulation/SimulationPanel';
 import { CookieConsent } from './components/common/CookieConsent';
 import { SettingsPanel } from './components/common/SettingsPanel';
-import { AutomatonType } from './types';
+import { AutomatonType, ValidationError } from './types';
 import { SimulationState } from './types/simulation';
 import { loadSettings, saveSettings, AppSettings } from './lib/storage/settings';
 import './App.css';
@@ -17,9 +17,11 @@ function App() {
   const [automatonType, setAutomatonType] = useState<AutomatonType>('DFA');
   const [showSimulation, setShowSimulation] = useState(true);
   const [simulation, setSimulation] = useState<SimulationState | null>(null);
-  const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
   const [settings, setSettings] = useState<AppSettings>(loadSettings());
   const [showSettings, setShowSettings] = useState(false);
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
 
   // Apply theme
   useEffect(() => {
@@ -40,6 +42,21 @@ function App() {
       saveSettings(updated);
       return updated;
     });
+  }, []);
+
+  const handleUndo = useCallback(() => {
+    const helper = getCanvasHelpers();
+    if (helper.undo) helper.undo();
+  }, []);
+
+  const handleRedo = useCallback(() => {
+    const helper = getCanvasHelpers();
+    if (helper.redo) helper.redo();
+  }, []);
+
+  const handleUndoRedoChange = useCallback((undoPossible: boolean, redoPossible: boolean) => {
+    setCanUndo(undoPossible);
+    setCanRedo(redoPossible);
   }, []);
 
   const getSimulationHandlers = () => (window as any).simulationHandlers || {};
@@ -224,6 +241,10 @@ function App() {
         onExportPNG={handleExportPNG}
         onExportJSON={handleExportJSON}
         onImportJSON={handleImportJSON}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
+        canUndo={canUndo}
+        canRedo={canRedo}
       />
 
       <main className="main">
@@ -236,6 +257,7 @@ function App() {
           showSimulation={showSimulation}
           onSimulationChange={setSimulation}
           onValidationChange={setValidationErrors}
+          onUndoRedoChange={handleUndoRedoChange}
           animationsEnabled={settings.animationsEnabled}
         />
         {showSimulation && (
