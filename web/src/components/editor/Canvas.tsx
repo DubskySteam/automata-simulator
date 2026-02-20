@@ -27,6 +27,7 @@ interface CanvasProps {
   onValidationChange?: (errors: ValidationError[]) => void;
   animationsEnabled?: boolean;
   onLoadAutomaton?: (automaton: Automaton) => void;
+  onUndoRedoChange?: (canUndo: boolean, canRedo: boolean) => void;
 }
 
 export function Canvas({
@@ -38,6 +39,7 @@ export function Canvas({
   onSimulationChange,
   onValidationChange,
   animationsEnabled = true,
+  onUndoRedoChange
 }: CanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerSize, setContainerSize] = useState({
@@ -127,6 +129,12 @@ export function Canvas({
     removeTransition,
     loadAutomaton,
     clearAutomaton,
+    redo,
+    undo,
+    canRedo,
+    canUndo,
+    pushToHistory,
+    updateStatePosition
   } = useAutomaton(DEFAULT_AUTOMATON);
 
   useEffect(() => {
@@ -261,6 +269,10 @@ export function Canvas({
         setOffset({ x: 0, y: 0 });
         setZoom(1);
       },
+      undo,
+      redo,
+      canRedo,
+      canUndo
     };
   }, [
     transitions,
@@ -270,6 +282,10 @@ export function Canvas({
     canvasRef,
     loadAutomaton,
     clearAutomaton,
+    undo,
+    redo,
+    canUndo,
+    canRedo
   ]);
 
   // Animation loop for breathing effect
@@ -313,9 +329,10 @@ export function Canvas({
 
   const handleStateMove = useCallback(
     (stateId: string, newPosition: Position) => {
-      updateState(stateId, { position: newPosition });
+      dragDidMoveRef.current = true,
+      updateStatePosition(stateId, newPosition);
     },
-    [updateState]
+    [updateStatePosition]
   );
 
   const handleStateSelect = useCallback((stateId: string, multiSelect: boolean) => {
@@ -478,7 +495,18 @@ export function Canvas({
         setSelectedStates(states.map((s) => s.id));
       }
     },
+    onUndo: undo,
+    onRedo: redo,
   });
+
+  useEffect(() => {
+    if (onUndoRedoChange) {
+      onUndoRedoChange(canUndo, canRedo);
+    }
+  }, [canUndo, canRedo, onUndoRedoChange]);
+
+  const prevIsDraggingRef = useRef(false);
+  const dragDidMoveRef = useRef(false);
 
   // Canvas interaction hook
   const { hoveredState, isDragging, isCreatingTransition, handlers } = useCanvasInteraction({
@@ -494,6 +522,14 @@ export function Canvas({
     selectedStates,
     enabled: true,
   });
+
+  useEffect(() => {
+    if (prevIsDraggingRef.current && !isDragging && dragDidMoveRef.current) {
+      pushToHistory();
+      dragDidMoveRef.current = false;
+    }
+    prevIsDraggingRef.current = isDragging;
+  }, [isDragging, pushToHistory]);
 
   const handleWheel = useCallback(
     (event: React.WheelEvent) => {
