@@ -18,13 +18,8 @@ export class SimulationEngine {
     // Check for initial state
     const initialStates = this.automaton.states.filter((s) => s.isInitial);
     if (initialStates.length === 0) {
-      errors.push({
-        message: 'No initial state defined',
-        type: 'error',
-        affectedStates: [],
-      });
+      errors.push({ message: 'No initial state defined', type: 'error', affectedStates: [] });
     }
-
     if (initialStates.length > 1) {
       errors.push({
         message: 'Multiple initial states defined (only one allowed)',
@@ -36,26 +31,16 @@ export class SimulationEngine {
     // Check for accept states
     const acceptStates = this.automaton.states.filter((s) => s.isAccept);
     if (acceptStates.length === 0) {
-      errors.push({
-        message: 'No accept states defined',
-        type: 'warning',
-        affectedStates: [],
-      });
+      errors.push({ message: 'No accept states defined', type: 'warning', affectedStates: [] });
     }
 
     // DFA-specific validation
     if (this.automaton.type === 'DFA') {
-      // Check for epsilon transitions in DFA
-      const epsilonTransitions = this.automaton.transitions.filter((t) =>
-        t.symbols.includes('ε')
-      );
-      
+      // No ε-transitions allowed
+      const epsilonTransitions = this.automaton.transitions.filter((t) => t.symbols.includes('ε'));
       if (epsilonTransitions.length > 0) {
         const affectedStates = new Set<string>();
-        epsilonTransitions.forEach((t) => {
-          affectedStates.add(t.from);
-        });
-
+        epsilonTransitions.forEach((t) => affectedStates.add(t.from));
         errors.push({
           message: `DFA cannot have ε-transitions (found ${epsilonTransitions.length})`,
           type: 'error',
@@ -64,24 +49,18 @@ export class SimulationEngine {
         });
       }
 
-      // Check for determinism: each state must have at most one transition per symbol
+      // Each state must have at most one transition per symbol
       for (const state of this.automaton.states) {
-        const outgoingTransitions = this.automaton.transitions.filter(
-          (t) => t.from === state.id
-        );
-
+        const outgoing = this.automaton.transitions.filter((t) => t.from === state.id);
         const symbolToTransitions = new Map<string, string[]>();
 
-        for (const transition of outgoingTransitions) {
+        for (const transition of outgoing) {
           for (const symbol of transition.symbols) {
-            if (!symbolToTransitions.has(symbol)) {
-              symbolToTransitions.set(symbol, []);
-            }
+            if (!symbolToTransitions.has(symbol)) symbolToTransitions.set(symbol, []);
             symbolToTransitions.get(symbol)!.push(transition.id);
           }
         }
 
-        // Report duplicates
         for (const [symbol, transitionIds] of symbolToTransitions.entries()) {
           if (transitionIds.length > 1) {
             errors.push({
@@ -93,9 +72,29 @@ export class SimulationEngine {
           }
         }
       }
+      // ← state loop ends here. Alphabet check must NOT be inside this loop.
     }
 
-    // Validate transitions reference valid states
+    // Alphabet validation — applies to both DFA and NFA
+    if (this.automaton.alphabet.length > 0) {
+      for (const transition of this.automaton.transitions) {
+        const invalid = transition.symbols.filter(
+          (s) => s !== 'ε' && !this.automaton.alphabet.includes(s)
+        );
+        if (invalid.length === 0) continue;
+
+        const from = this.automaton.states.find((s) => s.id === transition.from);
+        const to = this.automaton.states.find((s) => s.id === transition.to);
+        errors.push({
+          message: `Transition ${from?.label} → ${to?.label} uses symbols not in alphabet: ${invalid.map((s) => `"${s}"`).join(', ')}`,
+          type: 'error',
+          affectedStates: [transition.from],
+          affectedTransitions: [transition.id],
+        });
+      }
+    }
+
+    // Transitions reference valid states and have symbols
     for (const transition of this.automaton.transitions) {
       const fromState = this.automaton.states.find((s) => s.id === transition.from);
       const toState = this.automaton.states.find((s) => s.id === transition.to);
@@ -107,7 +106,6 @@ export class SimulationEngine {
           affectedTransitions: [transition.id],
         });
       }
-
       if (!toState) {
         errors.push({
           message: `Transition references invalid target state: ${transition.to}`,
@@ -115,12 +113,9 @@ export class SimulationEngine {
           affectedTransitions: [transition.id],
         });
       }
-
       if (transition.symbols.length === 0) {
         errors.push({
-          message: `Transition from ${fromState?.label || transition.from} to ${
-            toState?.label || transition.to
-          } has no symbols`,
+          message: `Transition from ${fromState?.label ?? transition.from} to ${toState?.label ?? transition.to} has no symbols`,
           type: 'error',
           affectedTransitions: [transition.id],
         });

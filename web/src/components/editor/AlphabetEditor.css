@@ -1,0 +1,62 @@
+.alphabet-editor {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg-secondary);
+    min-width: 120px;
+    max-width: 280px;
+}
+
+.alphabet-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.alphabet-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    align-items: center;
+    flex: 1;
+}
+
+.alphabet-tag {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    background: var(--accent-subtle);
+    color: var(--accent);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.alphabet-tag button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--accent);
+    padding: 0;
+    font-size: 14px;
+    line-height: 1;
+    opacity: 0.7;
+}
+
+.alphabet-tag button:hover {
+    opacity: 1;
+}
+
+.alphabet-input {
+    border: none;
+    background: transparent;
+    outline: none;
+    font-size: 12px;
+    width: 60px;
+    color: var(--text-primary);
+}
