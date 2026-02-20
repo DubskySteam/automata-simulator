@@ -25,9 +25,10 @@ interface CanvasProps {
   onAutomatonTypeChange?: (type: AutomatonType) => void;
   onSimulationChange?: (simulation: SimulationState | null) => void;
   onValidationChange?: (errors: ValidationError[]) => void;
+  onUndoRedoChange?: (canUndo: boolean, canRedo: boolean) => void;
+  onAlphabetChange?: (alphabet: string[]) => void;
   animationsEnabled?: boolean;
   onLoadAutomaton?: (automaton: Automaton) => void;
-  onUndoRedoChange?: (canUndo: boolean, canRedo: boolean) => void;
 }
 
 export function Canvas({
@@ -38,15 +39,15 @@ export function Canvas({
   automatonType = 'NFA',
   onSimulationChange,
   onValidationChange,
+  onUndoRedoChange,
+  onAlphabetChange,
   animationsEnabled = true,
-  onUndoRedoChange
 }: CanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerSize, setContainerSize] = useState({
     width: propWidth || 800,
     height: propHeight || 600,
   });
-
   const rendererRef = useRef<CanvasRenderer | null>(null);
   const [offset, setOffset] = useState<Position>({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
@@ -69,59 +70,50 @@ export function Canvas({
     toState: string;
     editingTransitionId?: string;
   } | null>(null);
-
   const [simulation, setSimulation] = useState<SimulationState | null>(null);
   const simulationEngineRef = useRef<SimulationEngine | null>(null);
-  const playIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const playIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [animationTime, setAnimationTime] = useState(0);
   const animationFrameRef = useRef<number | null>(null);
 
-  // NEW: Validation error tracking
+  // Validation error tracking
   const validationErrorsRef = useRef<{
     states: Set<string>;
     transitions: Set<string>;
     errors: ValidationError[];
-  }>({
-    states: new Set(),
-    transitions: new Set(),
-    errors: [],
-  });
+  }>({ states: new Set(), transitions: new Set(), errors: [] });
 
-  // Use automaton hook
-  const DEFAULT_AUTOMATON = {
+  // Stale-closure fix for toolMode
+  const toolModeRef = useRef(toolMode);
+  useEffect(() => {
+    toolModeRef.current = toolMode;
+  }, [toolMode]);
+
+  // Drag tracking
+  const prevIsDraggingRef = useRef(false);
+  const dragDidMoveRef = useRef(false);
+
+  const DEFAULT_AUTOMATON: Automaton = {
     type: automatonType,
     states: [
-      {
-        id: '1',
-        label: 'q0',
-        isInitial: true,
-        isAccept: false,
-        position: { x: 200, y: 200 },
-      },
-      {
-        id: '2',
-        label: 'q1',
-        isInitial: false,
-        isAccept: true,
-        position: { x: 400, y: 200 },
-      },
+      { id: '1', label: 'q0', isInitial: true, isAccept: false, position: { x: 200, y: 200 } },
+      { id: '2', label: 'q1', isInitial: false, isAccept: true, position: { x: 400, y: 200 } },
     ],
-    transitions: [
-      {
-        id: 't1',
-        from: '1',
-        to: '2',
-        symbols: ['a', 'b'],
-      },
-    ],
+    transitions: [{ id: 't1', from: '1', to: '2', symbols: ['a', 'b'] }],
     alphabet: [],
   };
 
   const {
     automaton,
+    canUndo,
+    canRedo,
+    undo,
+    redo,
+    pushToHistory,
     addState,
     removeState,
     updateState,
+    updateStatePosition,
     toggleStateInitial,
     toggleStateAccept,
     addTransition,
@@ -129,68 +121,63 @@ export function Canvas({
     removeTransition,
     loadAutomaton,
     clearAutomaton,
-    redo,
-    undo,
-    canRedo,
-    canUndo,
-    pushToHistory,
-    updateStatePosition
+    setAlphabet,
   } = useAutomaton(DEFAULT_AUTOMATON);
 
+  const { states, transitions } = automaton;
+  const activeStates = simulation?.steps[simulation.currentStep]?.currentStates || [];
+
+  // Restore from localStorage
   useEffect(() => {
-    // Try to restore from localStorage on mount
     const saved = storage.load();
     if (saved && saved.states.length > 0) {
-      console.log('Restoring saved automaton from localStorage');
       loadAutomaton(saved);
     }
   }, [loadAutomaton]);
 
+  // Sync automaton type when prop changes
   useEffect(() => {
     if (automaton.type !== automatonType) {
       loadAutomaton({ ...automaton, type: automatonType });
     }
-  }, [automatonType]);
+  }, [automatonType]); // eslint-disable-line
 
-  const { states, transitions } = automaton;
-
-  // Get active states for visual feedback (declared early to avoid reference errors)
-  const activeStates = simulation?.steps[simulation.currentStep]?.currentStates || [];
-
-  // UPDATED: Update simulation engine and validation tracking when automaton changes
+  // Validation — run on every automaton change
   useEffect(() => {
     simulationEngineRef.current = new SimulationEngine(automaton);
     const result = simulationEngineRef.current.validate();
 
-    // Build error tracking sets
     const errorStates = new Set<string>();
     const errorTransitions = new Set<string>();
-
     result.errors.forEach((error) => {
       error.affectedStates?.forEach((id) => errorStates.add(id));
       error.affectedTransitions?.forEach((id) => errorTransitions.add(id));
     });
-
     validationErrorsRef.current = {
       states: errorStates,
       transitions: errorTransitions,
       errors: result.errors,
     };
 
-    // Notify parent (keep backward compatibility)
-    if (onValidationChange) {
-      onValidationChange(result.errors);
-    }
+    onValidationChange?.(result.errors);
   }, [automaton, onValidationChange]);
+
+  // Notify parent of undo/redo capability
+  useEffect(() => {
+    onUndoRedoChange?.(canUndo, canRedo);
+  }, [canUndo, canRedo, onUndoRedoChange]);
+
+  // Notify parent of alphabet changes
+  useEffect(() => {
+    onAlphabetChange?.(automaton.alphabet);
+  }, [automaton.alphabet, onAlphabetChange]);
 
   // Notify parent of simulation changes
   useEffect(() => {
-    if (onSimulationChange) {
-      onSimulationChange(simulation);
-    }
+    onSimulationChange?.(simulation);
   }, [simulation, onSimulationChange]);
 
-  // Expose simulation handlers via props
+  // Expose simulation handlers to App via window
   useEffect(() => {
     if (showSimulation) {
       (window as any).simulationHandlers = {
@@ -201,69 +188,52 @@ export function Canvas({
         pause: handleSimulationPause,
       };
     }
-  }, [showSimulation]);
+  }, [showSimulation]); // eslint-disable-line
 
+  // ResizeObserver
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
-
-    const resizeObserver = new ResizeObserver((entries) => {
+    const ro = new ResizeObserver((entries) => {
       for (const entry of entries) {
         const { width, height } = entry.contentRect;
         setContainerSize({ width, height });
       }
     });
-
-    resizeObserver.observe(container);
-    return () => {
-      resizeObserver.disconnect();
-    };
+    ro.observe(container);
+    return () => ro.disconnect();
   }, []);
 
   const width = containerSize.width;
   const height = containerSize.height;
   const canvasRef = useCanvas({ width, height });
 
-  // Expose canvas helpers to parent (for epsilon transition cleanup)
   useEffect(() => {
     (window as any).canvasHelpers = {
-      hasEpsilonTransitions: () => {
-        return transitions.some((t) => t.symbols.includes('ε'));
-      },
+      hasEpsilonTransitions: () => transitions.some((t) => t.symbols.includes('ε')),
       removeEpsilonTransitions: () => {
-        const epsilonTransitionIds: string[] = [];
-        const transitionsToUpdate: Array<{ id: string; symbols: string[] }> = [];
-
+        const toRemove: string[] = [];
+        const toUpdate: { id: string; symbols: string[] }[] = [];
         transitions.forEach((t) => {
           if (t.symbols.includes('ε')) {
-            const newSymbols = t.symbols.filter((s) => s !== 'ε');
-            if (newSymbols.length === 0) {
-              epsilonTransitionIds.push(t.id);
-            } else {
-              transitionsToUpdate.push({ id: t.id, symbols: newSymbols });
-            }
+            const s = t.symbols.filter((x) => x !== 'ε');
+            if (s.length === 0) toRemove.push(t.id);
+            else toUpdate.push({ id: t.id, symbols: s });
           }
         });
-
-        epsilonTransitionIds.forEach((id) => removeTransition(id));
-        transitionsToUpdate.forEach(({ id, symbols }) => updateTransition(id, { symbols }));
+        toRemove.forEach((id) => removeTransition(id));
+        toUpdate.forEach(({ id, symbols }) => updateTransition(id, { symbols }));
       },
       exportToPNG: () => {
         const canvas = canvasRef.current;
         if (!canvas) return;
-
         const link = document.createElement('a');
         link.download = `automaton-${Date.now()}.png`;
         link.href = canvas.toDataURL('image/png');
         link.click();
       },
-      getAutomaton: () => {
-        return automaton;
-      },
-      loadAutomaton: (newAutomaton: Automaton) => {
-        console.log('Loading automaton:', newAutomaton);
-        loadAutomaton(newAutomaton);
-      },
+      getAutomaton: () => automaton,
+      loadAutomaton: (a: Automaton) => loadAutomaton(a),
       clearWorkspace: () => {
         loadAutomaton(DEFAULT_AUTOMATON);
         setOffset({ x: 0, y: 0 });
@@ -271,8 +241,9 @@ export function Canvas({
       },
       undo,
       redo,
+      canUndo,
       canRedo,
-      canUndo
+      setAlphabet,
     };
   }, [
     transitions,
@@ -285,42 +256,33 @@ export function Canvas({
     undo,
     redo,
     canUndo,
-    canRedo
+    canRedo,
+    setAlphabet,
   ]);
 
-  // Animation loop for breathing effect
+  // Animation loop
   useEffect(() => {
     if (!animationsEnabled) return;
-
     let startTime = Date.now();
     const animate = () => {
-      const elapsed = (Date.now() - startTime) / 1000;
-      setAnimationTime(elapsed);
+      setAnimationTime((Date.now() - startTime) / 1000);
       animationFrameRef.current = requestAnimationFrame(animate);
     };
-
     if (activeStates.length > 0) {
       animationFrameRef.current = requestAnimationFrame(animate);
     }
-
     return () => {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-      }
+      if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
     };
   }, [activeStates.length, animationsEnabled]);
 
-  // Find transition at position
   const findTransitionAtPosition = useCallback(
     (pos: Position): Transition | null => {
       for (let i = transitions.length - 1; i >= 0; i--) {
-        const transition = transitions[i];
-        const fromState = states.find((s) => s.id === transition.from);
-        const toState = states.find((s) => s.id === transition.to);
-
-        if (fromState && toState && isPointOnTransition(pos, fromState, toState, 10)) {
-          return transition;
-        }
+        const t = transitions[i];
+        const from = states.find((s) => s.id === t.from);
+        const to = states.find((s) => s.id === t.to);
+        if (from && to && isPointOnTransition(pos, from, to, 10)) return t;
       }
       return null;
     },
@@ -329,35 +291,37 @@ export function Canvas({
 
   const handleStateMove = useCallback(
     (stateId: string, newPosition: Position) => {
-      dragDidMoveRef.current = true,
+      dragDidMoveRef.current = true;
       updateStatePosition(stateId, newPosition);
     },
     [updateStatePosition]
   );
 
   const handleStateSelect = useCallback((stateId: string, multiSelect: boolean) => {
-    setSelectedStates((prev) => {
-      if (multiSelect) {
-        return prev.includes(stateId) ? prev.filter((id) => id !== stateId) : [...prev, stateId];
-      }
-      return [stateId];
-    });
+    setSelectedStates((prev) =>
+      multiSelect
+        ? prev.includes(stateId)
+          ? prev.filter((id) => id !== stateId)
+          : [...prev, stateId]
+        : [stateId]
+    );
   }, []);
 
   const handleStateClick = useCallback(
     (stateId: string, event: React.MouseEvent) => {
-      if (toolMode === 'addTransition') {
+      const mode = toolModeRef.current;
+      if (mode === 'addTransition') {
         if (!transitionDraft) {
           setTransitionDraft({ fromState: stateId });
         } else {
           setTransitionModal({ fromState: transitionDraft.fromState, toState: stateId });
           setTransitionDraft(null);
         }
-      } else if (toolMode === 'select') {
+      } else if (mode === 'select') {
         handleStateSelect(stateId, event.shiftKey);
       }
     },
-    [toolMode, transitionDraft, handleStateSelect]
+    [transitionDraft, handleStateSelect]
   );
 
   const handleTransitionStart = useCallback((stateId: string) => {
@@ -376,24 +340,24 @@ export function Canvas({
 
   const handleCanvasClick = useCallback(
     (position: Position) => {
-      if (toolMode === 'addState') {
+      const mode = toolModeRef.current;
+      if (mode === 'addState') {
         addState(position);
         return;
       }
-
-      if (toolMode === 'addTransition') {
+      if (mode === 'addTransition') {
         setTransitionDraft(null);
         return;
       }
 
       const now = Date.now();
-      const timeSinceLastClick = now - lastClickTimeRef.current;
-      const distance = Math.hypot(
+      const timeSince = now - lastClickTimeRef.current;
+      const dist = Math.hypot(
         position.x - lastClickPosRef.current.x,
         position.y - lastClickPosRef.current.y
       );
 
-      if (timeSinceLastClick < CANVAS_CONSTANTS.DOUBLE_CLICK_THRESHOLD && distance < 10) {
+      if (timeSince < CANVAS_CONSTANTS.DOUBLE_CLICK_THRESHOLD && dist < 10) {
         addState(position);
         lastClickTimeRef.current = 0;
       } else {
@@ -402,16 +366,13 @@ export function Canvas({
         lastClickPosRef.current = position;
       }
     },
-    [toolMode, addState]
+    [addState]
   );
 
-  // Simulation handlers
   const handleSimulationStart = useCallback((inputString: string) => {
     if (!simulationEngineRef.current) return;
-
     const steps = simulationEngineRef.current.simulate(inputString);
     const accepted = simulationEngineRef.current.isAccepted(steps);
-
     setSimulation({
       isRunning: false,
       isPaused: false,
@@ -430,12 +391,10 @@ export function Canvas({
   const handleSimulationStep = useCallback((direction: 'forward' | 'back') => {
     setSimulation((prev) => {
       if (!prev) return null;
-
       const newStep =
         direction === 'forward'
           ? Math.min(prev.currentStep + 1, prev.steps.length - 1)
           : Math.max(prev.currentStep - 1, 0);
-
       return { ...prev, currentStep: newStep };
     });
   }, []);
@@ -449,15 +408,10 @@ export function Canvas({
   }, []);
 
   const handleSimulationPlay = useCallback(() => {
-    setSimulation((prev) => {
-      if (!prev) return null;
-      return { ...prev, isRunning: true };
-    });
-
+    setSimulation((prev) => (prev ? { ...prev, isRunning: true } : null));
     playIntervalRef.current = setInterval(() => {
       setSimulation((prev) => {
         if (!prev) return null;
-
         if (prev.currentStep >= prev.steps.length - 1) {
           if (playIntervalRef.current) {
             clearInterval(playIntervalRef.current);
@@ -465,7 +419,6 @@ export function Canvas({
           }
           return { ...prev, isRunning: false };
         }
-
         return { ...prev, currentStep: prev.currentStep + 1 };
       });
     }, 1000);
@@ -476,13 +429,9 @@ export function Canvas({
       clearInterval(playIntervalRef.current);
       playIntervalRef.current = null;
     }
-    setSimulation((prev) => {
-      if (!prev) return null;
-      return { ...prev, isRunning: false };
-    });
+    setSimulation((prev) => (prev ? { ...prev, isRunning: false } : null));
   }, []);
 
-  // Keyboard shortcuts
   useKeyboardShortcuts({
     onDelete: () => {
       if (selectedStates.length > 0) {
@@ -491,7 +440,7 @@ export function Canvas({
       }
     },
     onSelectAll: () => {
-      if (toolMode === 'select') {
+      if (toolModeRef.current === 'select') {
         setSelectedStates(states.map((s) => s.id));
       }
     },
@@ -499,16 +448,6 @@ export function Canvas({
     onRedo: redo,
   });
 
-  useEffect(() => {
-    if (onUndoRedoChange) {
-      onUndoRedoChange(canUndo, canRedo);
-    }
-  }, [canUndo, canRedo, onUndoRedoChange]);
-
-  const prevIsDraggingRef = useRef(false);
-  const dragDidMoveRef = useRef(false);
-
-  // Canvas interaction hook
   const { hoveredState, isDragging, isCreatingTransition, handlers } = useCanvasInteraction({
     states,
     onStateMove: handleStateMove,
@@ -523,6 +462,7 @@ export function Canvas({
     enabled: true,
   });
 
+  // Commit drag to history when drag ends
   useEffect(() => {
     if (prevIsDraggingRef.current && !isDragging && dragDidMoveRef.current) {
       pushToHistory();
@@ -535,10 +475,12 @@ export function Canvas({
     (event: React.WheelEvent<HTMLCanvasElement>) => {
       const result = handlers.onWheel(event);
       if (result) {
-        setZoom((prev) => {
-          const newZoom = prev + result.zoomDelta;
-          return Math.max(CANVAS_CONSTANTS.MIN_ZOOM, Math.min(CANVAS_CONSTANTS.MAX_ZOOM, newZoom));
-        });
+        setZoom((prev) =>
+          Math.max(
+            CANVAS_CONSTANTS.MIN_ZOOM,
+            Math.min(CANVAS_CONSTANTS.MAX_ZOOM, prev + result.zoomDelta)
+          )
+        );
       }
     },
     [handlers]
@@ -546,34 +488,26 @@ export function Canvas({
 
   const handleMouseMove = useCallback(
     (event: React.MouseEvent<HTMLCanvasElement>) => {
-      const canvas = event.currentTarget;
-      const pos = getCanvasCoordinates(event, canvas, offset, zoom);
+      const pos = getCanvasCoordinates(event, event.currentTarget, offset, zoom);
       setMousePos(pos);
-
       const result = handlers.onMouseMove(event);
-      if (result?.panDelta && toolMode === 'select') {
-        setOffset((prev) => ({
-          x: prev.x + result.panDelta.x,
-          y: prev.y + result.panDelta.y,
-        }));
+      if (result?.panDelta && toolModeRef.current === 'select') {
+        setOffset((prev) => ({ x: prev.x + result.panDelta.x, y: prev.y + result.panDelta.y }));
       }
     },
-    [handlers, toolMode, offset, zoom]
+    [handlers, offset, zoom]
   );
 
   const handleContextMenu = useCallback(
     (event: React.MouseEvent<HTMLCanvasElement>) => {
       event.preventDefault();
+      const pos = getCanvasCoordinates(event, event.currentTarget, offset, zoom);
 
-      const canvas = event.currentTarget;
-      const pos = getCanvasCoordinates(event, canvas, offset, zoom);
-
-      const clickedState = states.find((state) => {
-        const dx = pos.x - state.position.x;
-        const dy = pos.y - state.position.y;
+      const clickedState = states.find((s) => {
+        const dx = pos.x - s.position.x,
+          dy = pos.y - s.position.y;
         return Math.sqrt(dx * dx + dy * dy) <= CANVAS_CONSTANTS.STATE_RADIUS;
       });
-
       if (clickedState) {
         setContextMenu({
           x: event.clientX,
@@ -582,7 +516,6 @@ export function Canvas({
         });
         return;
       }
-
       const clickedTransition = findTransitionAtPosition(pos);
       if (clickedTransition) {
         setContextMenu({
@@ -592,7 +525,6 @@ export function Canvas({
         });
         return;
       }
-
       setContextMenu(null);
     },
     [states, findTransitionAtPosition, offset, zoom]
@@ -602,17 +534,12 @@ export function Canvas({
     if (!contextMenu?.target) return [];
 
     if (contextMenu.target.type === 'state') {
-      const state = states.find((s) => s.id === (contextMenu.target as { type: 'state'; id: string }).id);
+      const state = states.find(
+        (s) => s.id === (contextMenu.target as { type: 'state'; id: string }).id
+      );
       if (!state) return [];
-
       return [
-        {
-          label: 'Edit State',
-          icon: '✏️',
-          onClick: () => {
-            setStateEditModal(state);
-          },
-        },
+        { label: 'Edit State', icon: '✏️', onClick: () => setStateEditModal(state) },
         { separator: true } as ContextMenuItem,
         {
           label: state.isInitial ? 'Unset Initial State' : 'Set as Initial State',
@@ -631,40 +558,31 @@ export function Canvas({
           destructive: true,
           onClick: () => {
             removeState(state.id);
-            setSelectedStates((prev) => prev.filter((id) => id !== state.id));
+            setSelectedStates((p) => p.filter((id) => id !== state.id));
           },
         },
       ];
     }
 
-    if (contextMenu.target && contextMenu.target.type === 'transition') {
-      const transition = transitions.find((t) => t.id === contextMenu.target!.id);
-      if (!transition) return [];
-
+    if (contextMenu.target.type === 'transition') {
+      const t = transitions.find((tr) => tr.id === contextMenu.target!.id);
+      if (!t) return [];
       return [
         {
           label: 'Edit Transition',
           icon: '✏️',
-          onClick: () => {
-            setTransitionModal({
-              fromState: transition.from,
-              toState: transition.to,
-              editingTransitionId: transition.id,
-            });
-          },
+          onClick: () =>
+            setTransitionModal({ fromState: t.from, toState: t.to, editingTransitionId: t.id }),
         },
         { separator: true } as ContextMenuItem,
         {
           label: 'Delete Transition',
           icon: '🗑️',
           destructive: true,
-          onClick: () => {
-            removeTransition(transition.id);
-          },
+          onClick: () => removeTransition(t.id),
         },
       ];
     }
-
     return [];
   }, [
     contextMenu,
@@ -676,24 +594,18 @@ export function Canvas({
     removeTransition,
   ]);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (playIntervalRef.current) {
-        clearInterval(playIntervalRef.current);
-      }
+      if (playIntervalRef.current) clearInterval(playIntervalRef.current);
     };
   }, []);
 
-  // Initialize renderer
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-
     rendererRef.current = new CanvasRenderer(canvas);
   }, [canvasRef]);
 
-  // UPDATED: Render loop with error highlighting
   useEffect(() => {
     const canvas = canvasRef.current;
     const renderer = rendererRef.current;
@@ -702,59 +614,49 @@ export function Canvas({
     renderer.clear(width, height);
     renderer.drawGrid(width, height, offset, zoom);
 
-    // Build a map of reverse transitions for curve detection
-    const reverseTransitionMap = new Map<string, boolean>();
+    // Detect bidirectional transitions for curve rendering
+    const reverseMap = new Map<string, boolean>();
     transitions.forEach((t) => {
-      const key = `${t.from}-${t.to}`;
-      if (transitions.some((rt) => rt.from === t.to && rt.to === t.from)) {
-        reverseTransitionMap.set(key, true);
+      if (transitions.some((r) => r.from === t.to && r.to === t.from)) {
+        reverseMap.set(`${t.from}-${t.to}`, true);
       }
     });
 
-    // Draw transitions with error highlighting
-    transitions.forEach((transition) => {
-      const fromState = states.find((s) => s.id === transition.from);
-      const toState = states.find((s) => s.id === transition.to);
-      if (fromState && toState) {
-        const key = `${transition.from}-${transition.to}`;
-        const hasReverse = reverseTransitionMap.get(key) || false;
-
-        renderer.drawTransition(transition, fromState, toState, offset, zoom, {
-          hasReverse,
-          hasError: validationErrorsRef.current.transitions.has(transition.id),
+    // Draw transitions
+    transitions.forEach((t) => {
+      const from = states.find((s) => s.id === t.from);
+      const to = states.find((s) => s.id === t.to);
+      if (from && to) {
+        renderer.drawTransition(t, from, to, offset, zoom, {
+          hasReverse: reverseMap.get(`${t.from}-${t.to}`) || false,
+          hasError: validationErrorsRef.current.transitions.has(t.id),
         });
       }
     });
 
-    // Draw transition draft
+    // Draft transition line while drawing
     if ((transitionDraft || isCreatingTransition) && transitionDraft) {
-      const fromState = states.find((s) => s.id === transitionDraft.fromState);
-      if (fromState) {
+      const from = states.find((s) => s.id === transitionDraft.fromState);
+      if (from) {
         const ctx = canvas.getContext('2d');
         if (ctx) {
-          const CANVAS_COLORS = getCanvasColors();
-          const fromX = fromState.position.x * zoom + offset.x;
-          const fromY = fromState.position.y * zoom + offset.y;
-          const toX = mousePos.x * zoom + offset.x;
-          const toY = mousePos.y * zoom + offset.y;
-
-          ctx.strokeStyle = CANVAS_COLORS.transition.hover;
+          const COLORS = getCanvasColors();
+          ctx.strokeStyle = COLORS.transition.hover;
           ctx.lineWidth = 2;
           ctx.setLineDash([5, 5]);
           ctx.beginPath();
-          ctx.moveTo(fromX, fromY);
-          ctx.lineTo(toX, toY);
+          ctx.moveTo(from.position.x * zoom + offset.x, from.position.y * zoom + offset.y);
+          ctx.lineTo(mousePos.x * zoom + offset.x, mousePos.y * zoom + offset.y);
           ctx.stroke();
           ctx.setLineDash([]);
         }
       }
     }
 
-    // Draw states with error highlighting
+    // Draw states
     states.forEach((state) => {
-      const isHighlighted = transitionDraft?.fromState === state.id;
       const isActive = activeStates.includes(state.id);
-
+      const isHighlighted = transitionDraft?.fromState === state.id;
       renderer.drawState(state, offset, zoom, {
         isHovered: hoveredState === state.id || isHighlighted,
         isSelected: selectedStates.includes(state.id),
@@ -807,12 +709,11 @@ export function Canvas({
         isOpen={transitionModal !== null}
         onClose={() => setTransitionModal(null)}
         onSave={(symbols) => {
-          if (transitionModal) {
-            if (transitionModal.editingTransitionId) {
-              updateTransition(transitionModal.editingTransitionId, { symbols });
-            } else {
-              addTransition(transitionModal.fromState, transitionModal.toState, symbols);
-            }
+          if (!transitionModal) return;
+          if (transitionModal.editingTransitionId) {
+            updateTransition(transitionModal.editingTransitionId, { symbols });
+          } else {
+            addTransition(transitionModal.fromState, transitionModal.toState, symbols);
           }
         }}
         initialSymbols={
@@ -830,16 +731,17 @@ export function Canvas({
         }
       />
 
-      <div ref={containerRef} className={`canvas-container ${getCursorClass()}`}>
+      <div ref={containerRef} style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
         <canvas
           ref={canvasRef}
-          width={width}
-          height={height}
-          onMouseDown={handlers.onMouseDown}
+          className={getCursorClass()}
+          onMouseDown={handlers.onMouseDown as React.MouseEventHandler<HTMLCanvasElement>}
+          onMouseUp={handlers.onMouseUp as React.MouseEventHandler<HTMLCanvasElement>}
+          onMouseLeave={handlers.onMouseLeave as React.MouseEventHandler<HTMLCanvasElement>}
           onMouseMove={handleMouseMove}
-          onMouseUp={handlers.onMouseUp}
           onWheel={handleWheel}
           onContextMenu={handleContextMenu}
+          style={{ display: 'block', width: '100%', height: '100%' }}
         />
       </div>
     </>

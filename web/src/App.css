@@ -3,7 +3,12 @@
   flex-direction: column;
   height: 100vh;
   overflow: hidden;
-  background: var(--bg-secondary);
+}
+
+.app-layout {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
 }
 
 .header {

@@ -218,6 +218,13 @@ export function useAutomaton(initialConfig?: UseAutomatonProps) {
     });
   }, [setAutomaton]);
 
+  const setAlphabet = useCallback(
+    (alphabet: string[]) => {
+      setAutomaton((prev) => ({ ...prev, alphabet }));
+    },
+    [setAutomaton]
+  );
+
   return {
     automaton,
     addState,
@@ -236,5 +243,6 @@ export function useAutomaton(initialConfig?: UseAutomatonProps) {
     undo,
     pushToHistory,
     updateStatePosition,
+    setAlphabet,
   };
 }
