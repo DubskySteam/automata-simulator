@@ -4,7 +4,7 @@ import { Toolbar } from './components/editor/Toolbar';
 import { SimulationPanel } from './components/simulation/SimulationPanel';
 import { CookieConsent } from './components/common/CookieConsent';
 import { SettingsPanel } from './components/common/SettingsPanel';
-import { AutomatonType } from './types';
+import { AutomatonType, ValidationError } from './types';
 import { SimulationState } from './types/simulation';
 import { loadSettings, saveSettings, AppSettings } from './lib/storage/settings';
 import './App.css';
@@ -17,7 +17,7 @@ function App() {
   const [automatonType, setAutomatonType] = useState<AutomatonType>('DFA');
   const [showSimulation, setShowSimulation] = useState(true);
   const [simulation, setSimulation] = useState<SimulationState | null>(null);
-  const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
   const [settings, setSettings] = useState<AppSettings>(loadSettings());
   const [showSettings, setShowSettings] = useState(false);
 

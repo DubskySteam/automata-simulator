@@ -24,7 +24,7 @@ interface CanvasProps {
   automatonType?: AutomatonType;
   onAutomatonTypeChange?: (type: AutomatonType) => void;
   onSimulationChange?: (simulation: SimulationState | null) => void;
-  onValidationChange?: (errors: string[]) => void;
+  onValidationChange?: (errors: ValidationError[]) => void;
   animationsEnabled?: boolean;
   onLoadAutomaton?: (automaton: Automaton) => void;
 }
@@ -171,7 +171,7 @@ export function Canvas({
 
     // Notify parent (keep backward compatibility)
     if (onValidationChange) {
-      onValidationChange(result.errors.map((e) => e.message));
+      onValidationChange(result.errors);
     }
   }, [automaton, onValidationChange]);
 
