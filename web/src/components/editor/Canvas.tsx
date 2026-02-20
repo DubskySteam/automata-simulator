@@ -532,7 +532,7 @@ export function Canvas({
   }, [isDragging, pushToHistory]);
 
   const handleWheel = useCallback(
-    (event: React.WheelEvent) => {
+    (event: React.WheelEvent<HTMLCanvasElement>) => {
       const result = handlers.onWheel(event);
       if (result) {
         setZoom((prev) => {
@@ -545,7 +545,7 @@ export function Canvas({
   );
 
   const handleMouseMove = useCallback(
-    (event: React.MouseEvent) => {
+    (event: React.MouseEvent<HTMLCanvasElement>) => {
       const canvas = event.currentTarget;
       const pos = getCanvasCoordinates(event, canvas, offset, zoom);
       setMousePos(pos);
@@ -562,7 +562,7 @@ export function Canvas({
   );
 
   const handleContextMenu = useCallback(
-    (event: React.MouseEvent) => {
+    (event: React.MouseEvent<HTMLCanvasElement>) => {
       event.preventDefault();
 
       const canvas = event.currentTarget;
@@ -797,6 +797,7 @@ export function Canvas({
       )}
 
       <StateEditModal
+        isOpen={stateEditModal !== null}
         state={stateEditModal}
         onClose={() => setStateEditModal(null)}
         onSave={updateState}
